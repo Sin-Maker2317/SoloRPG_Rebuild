@@ -5,15 +5,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local GameState = require(SharedFolder:WaitForChild("GameState"))
 
--- WorldService è nella stessa cartella Services
 local WorldService = require(script.Parent:WaitForChild("WorldService"))
-local EnemyService =
-	require(script.Parent:WaitForChild("EnemyService"))
+local EnemyService = require(script.Parent:WaitForChild("EnemyService"))
+local RewardService = require(script.Parent:WaitForChild("RewardService"))
 
 local PlayerStateService = {}
 PlayerStateService.__index = PlayerStateService
 
--- Stato in memoria (per ora). Più avanti lo leghiamo ai profili / DataStore.
 local playerState: {[Player]: string} = {}
 
 local function isValidState(state: string): boolean
@@ -41,7 +39,6 @@ local function teleportToSpawn(player: Player, spawnName: string)
 	if player.Character then
 		doTeleport(player.Character)
 	else
-		-- Se il character non è ancora pronto, teletrasporta appena spawnato
 		local conn
 		conn = player.CharacterAdded:Connect(function(char)
 			conn:Disconnect()
@@ -50,8 +47,13 @@ local function teleportToSpawn(player: Player, spawnName: string)
 	end
 end
 
+local function fireGateMessage(player: Player, msg: string)
+	local remotes = ReplicatedStorage:WaitForChild("Remotes")
+	local gateMessage = remotes:WaitForChild("GateMessage")
+	gateMessage:FireClient(player, msg)
+end
+
 function PlayerStateService:Init()
-	-- spazio per init futura
 end
 
 function PlayerStateService:Get(player: Player): string
@@ -66,35 +68,39 @@ function PlayerStateService:Set(player: Player, state: string)
 
 	playerState[player] = state
 
-	-- Teleport base per test flow
+	-- OpenWorld per ora = Town (placeholder)
+	if state == GameState.OpenWorld then
+		teleportToSpawn(player, "Spawn_Town")
+		return
+	end
+
 	if state == GameState.SoloGateTutorial then
 		teleportToSpawn(player, "Spawn_SoloGate")
+
+		-- Spawn nemico + Gate clear callback
 		EnemyService:SpawnDummyEnemy(Vector3.new(0, 5, -240), function()
-			-- Gate cleared: torna in town e dai ricompense placeholder
-			local RewardService = require(script.Parent:WaitForChild("RewardService"))
-			local rewards = RewardService:Add(player, 50, 100)
-
-			-- Messaggio client
-			local Remotes = game:GetService("ReplicatedStorage"):WaitForChild("Remotes")
-			local GateMessage = Remotes:WaitForChild("GateMessage")
-			GateMessage:FireClient(player, "GATE CLEARED! +50 XP, +100 COINS (placeholder)")
-
-			-- Torna in town
-			self:Set(player, "OpenWorld")
+			local r = RewardService:Add(player, 50, 100)
+			fireGateMessage(player, ("GATE CLEARED! +50 XP, +100 COINS | Tot: %d XP, %d COINS"):format(r.xp, r.coins))
+			playerState[player] = GameState.OpenWorld
 			teleportToSpawn(player, "Spawn_Town")
 		end)
-	elseif state == GameState.GuildGateTutorial then
+
+		return
+	end
+
+	if state == GameState.GuildGateTutorial then
 		teleportToSpawn(player, "Spawn_GuildHome")
+		return
 	end
 end
 
 function PlayerStateService:OnPlayerAdded(player: Player)
-	-- Per ora testiamo direttamente la scelta ospedale
 	playerState[player] = GameState.HospitalChoice
 end
 
 function PlayerStateService:OnPlayerRemoving(player: Player)
 	playerState[player] = nil
+	RewardService:Clear(player)
 end
 
 return PlayerStateService

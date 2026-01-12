@@ -1,5 +1,4 @@
 -- ServerScriptService/Services/EnemyService.lua
-
 local Workspace = game:GetService("Workspace")
 
 local EnemyService = {}
