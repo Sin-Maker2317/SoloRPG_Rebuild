@@ -10,6 +10,9 @@ local WorldService =
 local CombatService =
 	require(script.Parent:WaitForChild("Services"):WaitForChild("CombatService"))
 
+local ProfileMemoryService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("ProfileMemoryService"))
+
 WorldService:Init()
 
 -- === REMOTES SETUP ===
@@ -47,6 +50,8 @@ local ChoosePath = ensureRemoteEvent("ChoosePath")
 local Attack = ensureRemoteEvent("Attack")
 local ClientLog = ensureRemoteEvent("ClientLog")
 local GateMessage = ensureRemoteEvent("GateMessage")
+local SetGuildFaction = ensureRemoteEvent("SetGuildFaction")
+local CompleteTutorial = ensureRemoteEvent("CompleteTutorial")
 
 ClientLog.OnServerEvent:Connect(function(player, msg)
 	print("[ClientLog]", player.Name, msg)
@@ -60,11 +65,21 @@ end
 ChoosePath.OnServerEvent:Connect(function(player, choice)
 	print("[ChoosePath] from", player.Name, "choice:", choice)
 
+	ProfileMemoryService:SetPathChoice(player, choice)
+
 	if choice == "Solo" then
 		PlayerStateService:Set(player, "SoloGateTutorial")
 	elseif choice == "Guild" then
 		PlayerStateService:Set(player, "GuildGateTutorial")
 	end
+end)
+
+SetGuildFaction.OnServerEvent:Connect(function(player, factionId: string)
+	ProfileMemoryService:SetGuildFaction(player, factionId)
+end)
+
+CompleteTutorial.OnServerEvent:Connect(function(player)
+	PlayerStateService:Set(player, "HospitalChoice")
 end)
 
 Attack.OnServerEvent:Connect(function(player)

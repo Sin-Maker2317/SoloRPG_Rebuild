@@ -1,4 +1,6 @@
 -- ServerScriptService/Services/RewardService.lua
+local ProfileMemoryService = require(script.Parent:WaitForChild("ProfileMemoryService"))
+
 local RewardService = {}
 RewardService.__index = RewardService
 
@@ -17,6 +19,11 @@ function RewardService:Add(player, xp, coins)
 	local r = self:Get(player)
 	r.xp += xp
 	r.coins += coins
+	
+	-- Write to ProfileMemoryService
+	ProfileMemoryService:AddXP(player, xp)
+	ProfileMemoryService:AddCoins(player, coins)
+	
 	return r
 end
 
