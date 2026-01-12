@@ -11,8 +11,8 @@ gui.ResetOnSpawn = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
 local label = Instance.new("TextLabel")
-label.Size = UDim2.fromScale(0.6, 0.12)
-label.Position = UDim2.fromScale(0.2, 0.1)
+label.Size = UDim2.fromScale(0.7, 0.12)
+label.Position = UDim2.fromScale(0.15, 0.08)
 label.TextScaled = true
 label.BackgroundTransparency = 0.25
 label.Visible = false

@@ -54,17 +54,15 @@ local function ensurePlatform(parent: Instance, name: string, position: Vector3,
 end
 
 function WorldService:Init()
-	-- Crea una root ordinata per il mondo
 	local world = ensureFolder(Workspace, "World")
 	local platforms = ensureFolder(world, "Platforms")
 	local spawns = ensureFolder(world, "Spawns")
 
-	-- Due “stanze” placeholder
 	ensurePlatform(platforms, "Platform_Town", Vector3.new(0, 0, 0), Vector3.new(200, 1, 200))
 	ensurePlatform(platforms, "Platform_SoloGate", Vector3.new(0, 0, -250), Vector3.new(120, 1, 120))
 	ensurePlatform(platforms, "Platform_GuildHome", Vector3.new(250, 0, 0), Vector3.new(120, 1, 120))
 
-	-- Spawn invisibili
+	ensurePart(spawns, "Spawn_Town", Vector3.new(0, 5, 0))
 	ensurePart(spawns, "Spawn_SoloGate", Vector3.new(0, 5, -250))
 	ensurePart(spawns, "Spawn_GuildHome", Vector3.new(250, 5, 0))
 
