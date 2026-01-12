@@ -14,6 +14,14 @@ function EnemyService:SpawnDummyEnemy(position: Vector3)
 	humanoid.Health = 100
 	humanoid.Parent = model
 
+	humanoid.Died:Connect(function()
+		task.delay(1, function()
+			if model then
+				model:Destroy()
+			end
+		end)
+	end)
+
 	local root = Instance.new("Part")
 	root.Name = "HumanoidRootPart"
 	root.Size = Vector3.new(2, 2, 1)
