@@ -7,6 +7,8 @@ local GameState = require(SharedFolder:WaitForChild("GameState"))
 
 -- WorldService è nella stessa cartella Services
 local WorldService = require(script.Parent:WaitForChild("WorldService"))
+local EnemyService =
+	require(script.Parent:WaitForChild("EnemyService"))
 
 local PlayerStateService = {}
 PlayerStateService.__index = PlayerStateService
@@ -67,6 +69,7 @@ function PlayerStateService:Set(player: Player, state: string)
 	-- Teleport base per test flow
 	if state == GameState.SoloGateTutorial then
 		teleportToSpawn(player, "Spawn_SoloGate")
+		EnemyService:SpawnDummyEnemy(Vector3.new(0, 5, -240))
 	elseif state == GameState.GuildGateTutorial then
 		teleportToSpawn(player, "Spawn_GuildHome")
 	end
