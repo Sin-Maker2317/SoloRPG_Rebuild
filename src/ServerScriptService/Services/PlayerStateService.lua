@@ -69,7 +69,20 @@ function PlayerStateService:Set(player: Player, state: string)
 	-- Teleport base per test flow
 	if state == GameState.SoloGateTutorial then
 		teleportToSpawn(player, "Spawn_SoloGate")
-		EnemyService:SpawnDummyEnemy(Vector3.new(0, 5, -240))
+		EnemyService:SpawnDummyEnemy(Vector3.new(0, 5, -240), function()
+			-- Gate cleared: torna in town e dai ricompense placeholder
+			local RewardService = require(script.Parent:WaitForChild("RewardService"))
+			local rewards = RewardService:Add(player, 50, 100)
+
+			-- Messaggio client
+			local Remotes = game:GetService("ReplicatedStorage"):WaitForChild("Remotes")
+			local GateMessage = Remotes:WaitForChild("GateMessage")
+			GateMessage:FireClient(player, "GATE CLEARED! +50 XP, +100 COINS (placeholder)")
+
+			-- Torna in town
+			self:Set(player, "OpenWorld")
+			teleportToSpawn(player, "Spawn_Town")
+		end)
 	elseif state == GameState.GuildGateTutorial then
 		teleportToSpawn(player, "Spawn_GuildHome")
 	end

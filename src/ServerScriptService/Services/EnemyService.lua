@@ -5,7 +5,8 @@ local Workspace = game:GetService("Workspace")
 local EnemyService = {}
 EnemyService.__index = EnemyService
 
-function EnemyService:SpawnDummyEnemy(position: Vector3)
+-- Spawna un dummy e chiama onDied() quando muore
+function EnemyService:SpawnDummyEnemy(position: Vector3, onDied: (() -> ())?)
 	local model = Instance.new("Model")
 	model.Name = "DummyEnemy"
 
@@ -13,14 +14,6 @@ function EnemyService:SpawnDummyEnemy(position: Vector3)
 	humanoid.MaxHealth = 100
 	humanoid.Health = 100
 	humanoid.Parent = model
-
-	humanoid.Died:Connect(function()
-		task.delay(1, function()
-			if model then
-				model:Destroy()
-			end
-		end)
-	end)
 
 	local root = Instance.new("Part")
 	root.Name = "HumanoidRootPart"
@@ -31,6 +24,17 @@ function EnemyService:SpawnDummyEnemy(position: Vector3)
 
 	model.PrimaryPart = root
 	model.Parent = Workspace
+
+	humanoid.Died:Connect(function()
+		if onDied then
+			onDied()
+		end
+		task.delay(1, function()
+			if model then
+				model:Destroy()
+			end
+		end)
+	end)
 
 	return model
 end
