@@ -46,6 +46,7 @@ local GetPlayerState = ensureRemoteFunction("GetPlayerState")
 local ChoosePath = ensureRemoteEvent("ChoosePath")
 local Attack = ensureRemoteEvent("Attack")
 local ClientLog = ensureRemoteEvent("ClientLog")
+local GateMessage = ensureRemoteEvent("GateMessage")
 
 ClientLog.OnServerEvent:Connect(function(player, msg)
 	print("[ClientLog]", player.Name, msg)
