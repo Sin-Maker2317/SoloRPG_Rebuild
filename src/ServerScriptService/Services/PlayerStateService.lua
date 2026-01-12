@@ -13,6 +13,7 @@ local PlayerStateService = {}
 PlayerStateService.__index = PlayerStateService
 
 local playerState: {[Player]: string} = {}
+local activeGateEnemy: {[Player]: boolean} = {}
 
 local function isValidState(state: string): boolean
 	for _, v in pairs(GameState) do
@@ -77,13 +78,17 @@ function PlayerStateService:Set(player: Player, state: string)
 	if state == GameState.SoloGateTutorial then
 		teleportToSpawn(player, "Spawn_SoloGate")
 
-		-- Spawn nemico + Gate clear callback
-		EnemyService:SpawnDummyEnemy(Vector3.new(0, 5, -240), function()
-			local r = RewardService:Add(player, 50, 100)
-			fireGateMessage(player, ("GATE CLEARED! +50 XP, +100 COINS | Tot: %d XP, %d COINS"):format(r.xp, r.coins))
-			playerState[player] = GameState.OpenWorld
-			teleportToSpawn(player, "Spawn_Town")
-		end)
+		-- Spawn nemico + Gate clear callback (solo se non c'è già uno attivo)
+		if not activeGateEnemy[player] then
+			activeGateEnemy[player] = true
+			EnemyService:SpawnDummyEnemy(Vector3.new(0, 5, -240), function()
+				activeGateEnemy[player] = nil
+				local r = RewardService:Add(player, 50, 100)
+				fireGateMessage(player, ("GATE CLEARED! +50 XP, +100 COINS | Tot: %d XP, %d COINS"):format(r.xp, r.coins))
+				playerState[player] = GameState.OpenWorld
+				teleportToSpawn(player, "Spawn_Town")
+			end)
+		end
 
 		return
 	end
@@ -100,6 +105,7 @@ end
 
 function PlayerStateService:OnPlayerRemoving(player: Player)
 	playerState[player] = nil
+	activeGateEnemy[player] = nil
 	RewardService:Clear(player)
 end
 
