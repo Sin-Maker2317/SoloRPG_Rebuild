@@ -3,13 +3,25 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local GetProgress = Remotes:WaitForChild("GetProgress")
 local GetPlayerState = Remotes:WaitForChild("GetPlayerState")
 local ChoosePath = Remotes:WaitForChild("ChoosePath")
 
--- Chiediamo lo stato al server
+-- Check progress first: if path already chosen, auto-skip UI
+local progOk, prog = pcall(function()
+	return GetProgress:InvokeServer()
+end)
+if progOk and type(prog) == "table" and (prog.pathChoice == "Solo" or prog.pathChoice == "Guild") then
+	task.delay(0.2, function()
+		ChoosePath:FireServer(prog.pathChoice)
+	end)
+	return
+end
+
+-- Ask current state from server
 local state = GetPlayerState:InvokeServer()
 
--- Mostra UI SOLO se siamo nello stato HospitalChoice
+-- Show UI ONLY if we are in HospitalChoice state
 if state ~= "HospitalChoice" then
 	return
 end
@@ -39,5 +51,5 @@ local function makeButton(text, pos, choice)
 	end)
 end
 
-makeButton("Solitario", UDim2.fromScale(0.1, 0.15), "Solo")
-makeButton("Gilda", UDim2.fromScale(0.1, 0.55), "Guild")
+makeButton("Solo", UDim2.fromScale(0.1, 0.15), "Solo")
+makeButton("Guild", UDim2.fromScale(0.1, 0.55), "Guild")

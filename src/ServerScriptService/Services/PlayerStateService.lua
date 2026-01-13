@@ -1,5 +1,6 @@
 -- ServerScriptService/Services/PlayerStateService.lua
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local SharedFolder = ReplicatedStorage:WaitForChild("Shared")
@@ -8,142 +9,131 @@ local GameState = require(SharedFolder:WaitForChild("GameState"))
 local WorldService = require(script.Parent:WaitForChild("WorldService"))
 local EnemyService = require(script.Parent:WaitForChild("EnemyService"))
 local RewardService = require(script.Parent:WaitForChild("RewardService"))
-local ProfileMemoryService = require(script.Parent:WaitForChild("ProfileMemoryService"))
+local DebugService = require(script.Parent:WaitForChild("DebugService"))
+local ProgressService = require(script.Parent:WaitForChild("ProgressService"))
+local MobService = require(script.Parent:WaitForChild("MobService"))
+local LootService = require(script.Parent:WaitForChild("LootService"))
+local QuestService = require(script.Parent:WaitForChild("QuestService"))
 
 local PlayerStateService = {}
 PlayerStateService.__index = PlayerStateService
 
-local playerState: {[Player]: string} = {}
-local activeGateEnemy: {[Player]: boolean} = {}
-local lastGateClear: {[Player]: number} = {}
+local playerState = {}
+local lastSoloGateClear = {}
 
-local function isValidState(state: string): boolean
-	for _, v in pairs(GameState) do
-		if v == state then
-			return true
-		end
-	end
-	return false
-end
+local COOLDOWN = 30
 
-local function teleportToSpawn(player: Player, spawnName: string)
+local function teleportToSpawn(player, spawnName)
 	local cf = WorldService:GetSpawnCFrame(spawnName)
 	if not cf then
-		warn("[PlayerStateService] Spawn non trovato:", spawnName)
+		DebugService:Warn("Missing spawn:", spawnName)
 		return
 	end
 
-	local function doTeleport(character: Model)
-		local hrp = character:FindFirstChild("HumanoidRootPart")
-		if not hrp then return end
-		hrp.CFrame = cf + Vector3.new(0, 3, 0)
+	local function tp(char)
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			hrp.CFrame = cf + Vector3.new(0, 3, 0)
+		end
 	end
 
 	if player.Character then
-		doTeleport(player.Character)
+		tp(player.Character)
 	else
-		local conn
-		conn = player.CharacterAdded:Connect(function(char)
-			conn:Disconnect()
-			doTeleport(char)
-		end)
+		player.CharacterAdded:Once(tp)
 	end
 end
 
-local function fireGateMessage(player: Player, msg: string)
+local function fireGateMessage(player, msg)
 	local remotes = ReplicatedStorage:WaitForChild("Remotes")
-	local gateMessage = remotes:WaitForChild("GateMessage")
-	gateMessage:FireClient(player, msg)
+	remotes:WaitForChild("GateMessage"):FireClient(player, msg)
 end
 
-function PlayerStateService:Init()
+local function fireStateChanged(player, state)
+	local remotes = ReplicatedStorage:WaitForChild("Remotes")
+	remotes:WaitForChild("StateChanged"):FireClient(player, state)
 end
 
-function PlayerStateService:Get(player: Player): string
-	return playerState[player] or GameState.TutorialFakeDungeon
+function PlayerStateService:Init() end
+
+function PlayerStateService:Get(player)
+	return playerState[player] or GameState.AwakeningDungeon
 end
 
-function PlayerStateService:Set(player: Player, state: string)
-	if not isValidState(state) then
-		warn(("[PlayerStateService] Stato non valido '%s' per %s"):format(tostring(state), player.Name))
-		return
-	end
-
+function PlayerStateService:Set(player, state)
 	playerState[player] = state
+	fireStateChanged(player, state)
+	DebugService:Log("State set:", player.Name, state)
 
-	-- TutorialFakeDungeon - initial tutorial state
-	if state == GameState.TutorialFakeDungeon then
-		teleportToSpawn(player, "Spawn_TutorialDungeon")
+	if state == GameState.AwakeningDungeon then
+		teleportToSpawn(player, "Spawn_AwakeningDungeon")
 		return
 	end
 
-	-- OpenWorld per ora = Town (placeholder)
+	if state == GameState.HospitalChoice then
+		teleportToSpawn(player, "Spawn_Town")
+		return
+	end
+
 	if state == GameState.OpenWorld then
 		teleportToSpawn(player, "Spawn_Town")
 		return
 	end
 
 	if state == GameState.SoloGateTutorial then
-		-- Check cooldown
-		if lastGateClear[player] and (os.clock() - lastGateClear[player]) < 30 then
-			fireGateMessage(player, "Gate is recharging")
+		local last = lastSoloGateClear[player]
+		if last and os.clock() - last < COOLDOWN then
+			fireGateMessage(player, "Gate is recharging...")
+			self:Set(player, GameState.OpenWorld)
 			return
 		end
 
-		teleportToSpawn(player, "Spawn_SoloGate")
+		local spawn = (math.random(1, 2) == 1) and "Spawn_SoloGate" or "Spawn_SoloGate2"
+		teleportToSpawn(player, spawn)
 
-		-- Spawn nemico + Gate clear callback (solo se non c'è già uno attivo)
-		if not activeGateEnemy[player] then
-			activeGateEnemy[player] = true
-			EnemyService:SpawnDummyEnemy(Vector3.new(0, 5, -240), function()
-				activeGateEnemy[player] = nil
-				lastGateClear[player] = os.clock()
-				local r = RewardService:Add(player, 50, 100)
-				fireGateMessage(player, ("GATE CLEARED! +50 XP, +100 COINS | Tot: %d XP, %d COINS"):format(r.xp, r.coins))
-				playerState[player] = GameState.OpenWorld
-				teleportToSpawn(player, "Spawn_Town")
-			end)
-		end
+		local dummyPosition = (spawn == "Spawn_SoloGate") and Vector3.new(0, 5, -240) or Vector3.new(-250, 5, 10)
+		MobService:SpawnRandom(dummyPosition, function(mobKey, cfg, model)
+			local r, item, xp, coins = LootService:AwardKill(player, mobKey)
+			QuestService:OnKill(player)
+			
+			lastSoloGateClear[player] = os.clock()
+			QuestService:OnGateCleared(player)
+			
+			local itemText = item and (" | Item: " .. item) or ""
+			fireGateMessage(player, ("GATE CLEARED! Defeated %s: +%d XP +%d COINS%s | Total: %d XP, %d COINS"):format(mobKey, xp, coins, itemText, r.xp, r.coins))
+			self:Set(player, GameState.OpenWorld)
+		end)
 
 		return
 	end
 
 	if state == GameState.GuildGateTutorial then
-		-- Check cooldown
-		if lastGateClear[player] and (os.clock() - lastGateClear[player]) < 30 then
-			fireGateMessage(player, "Gate is recharging")
-			return
-		end
-
 		teleportToSpawn(player, "Spawn_GuildHome")
-
-		-- Spawn nemico + Gate clear callback (solo se non c'è già uno attivo)
-		if not activeGateEnemy[player] then
-			activeGateEnemy[player] = true
-			EnemyService:SpawnDummyEnemy(Vector3.new(250, 5, -10), function()
-				activeGateEnemy[player] = nil
-				lastGateClear[player] = os.clock()
-				local r = RewardService:Add(player, 25, 50)
-				fireGateMessage(player, ("GATE CLEARED! +25 XP, +50 COINS | Tot: %d XP, %d COINS"):format(r.xp, r.coins))
-				playerState[player] = GameState.OpenWorld
-				teleportToSpawn(player, "Spawn_Town")
-			end)
-		end
-
 		return
 	end
 end
 
-function PlayerStateService:OnPlayerAdded(player: Player)
-	playerState[player] = GameState.TutorialFakeDungeon
+function PlayerStateService:OnPlayerAdded(player)
+	local prog = ProgressService:Get(player)
+	playerState[player] = (prog.awakened and GameState.HospitalChoice) or GameState.AwakeningDungeon
+
+	player.CharacterAdded:Connect(function()
+		local s = self:Get(player)
+		if s == GameState.AwakeningDungeon then
+			teleportToSpawn(player, "Spawn_AwakeningDungeon")
+		elseif s == GameState.HospitalChoice then
+			teleportToSpawn(player, "Spawn_Town")
+		else
+			teleportToSpawn(player, "Spawn_Town")
+		end
+	end)
 end
 
-function PlayerStateService:OnPlayerRemoving(player: Player)
+function PlayerStateService:OnPlayerRemoving(player)
 	playerState[player] = nil
-	activeGateEnemy[player] = nil
-	lastGateClear[player] = nil
+	lastSoloGateClear[player] = nil
 	RewardService:Clear(player)
-	ProfileMemoryService:Clear(player)
+	ProgressService:Clear(player)
 end
 
 return PlayerStateService
