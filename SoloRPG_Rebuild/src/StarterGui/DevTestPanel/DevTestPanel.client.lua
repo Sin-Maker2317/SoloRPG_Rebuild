@@ -241,25 +241,4 @@ RunService.Heartbeat:Connect(function(dt)
         end
     end
 end)
-        local s = SKILLS[3]
-        if s then skillButtons[s.id].button:Activate() end
-    end
-end)
 
--- RunService loop to decrement cooldowns and update overlays
-RunService.Heartbeat:Connect(function(dt)
-    for _, skill in ipairs(SKILLS) do
-        local id = skill.id
-        if cooldowns[id] and cooldowns[id] > 0 then
-            cooldowns[id] = math.max(0, cooldowns[id] - dt)
-            local entry = skillButtons[id]
-            if entry then
-                entry.overlay.Text = tostring(math.ceil(cooldowns[id]))
-                if cooldowns[id] <= 0 then
-                    entry.overlay.Visible = false
-                    entry.button.BackgroundColor3 = Color3.fromRGB(60,60,60)
-                end
-            end
-        end
-    end
-end)
