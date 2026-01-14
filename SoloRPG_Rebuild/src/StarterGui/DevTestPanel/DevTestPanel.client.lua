@@ -7,11 +7,14 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
-local remotes = ReplicatedStorage:WaitForChild("Remotes")
+local remotes = ReplicatedStorage:FindFirstChild("Remotes")
 
-local devRemote = remotes:WaitForChild("DevTools")
-local useSkill = remotes:FindFirstChild("UseSkill")
-local getStats = remotes:FindFirstChild("GetStatsSnapshot")
+local devRemote, useSkill, getStats
+if remotes then
+    devRemote = remotes:FindFirstChild("DevTools")
+    useSkill = remotes:FindFirstChild("UseSkill")
+    getStats = remotes:FindFirstChild("GetStatsSnapshot")
+end
 
 -- default cooldowns for known test skills
 local DEFAULT_COOLDOWNS = {
@@ -33,7 +36,25 @@ end
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "DevTestPanel"
 screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- robust parenting: prefer player.PlayerGui when available, otherwise fall back to script parent
+local success, parentGui = pcall(function()
+    if player then return player:FindFirstChild("PlayerGui") end
+end)
+if not success or not parentGui then
+    if script.Parent and script.Parent:IsA("PlayerGui") then
+        parentGui = script.Parent
+    elseif script.Parent and script.Parent.Name == "StarterGui" then
+        -- In some runtimes StarterGui works as a container for LocalScript UI
+        parentGui = player and player:FindFirstChild("PlayerGui") or script.Parent
+    else
+        parentGui = script.Parent
+    end
+end
+screenGui.Parent = parentGui
+
+-- debug indicator: visible only in output to confirm LocalScript executed
+pcall(function() print("DevTestPanel: LocalScript loaded; parentGui=", tostring(parentGui)) end)
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0,300,0,220)
