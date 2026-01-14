@@ -47,6 +47,12 @@ local StunService =
 local GuardService =
 	require(script.Parent:WaitForChild("Services"):WaitForChild("GuardService"))
 
+local GuildService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("GuildService"))
+
+local EquipmentService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("EquipmentService"))
+
 DebugService:Log("[ServerBootstrap] STARTING...")
 
 WorldService:Init()
@@ -187,6 +193,28 @@ AllocateStatPoint.OnServerEvent:Connect(function(player, field)
 	if ok then
 		CombatEvent:FireClient(player, { type = "StatAllocated", field = field })
 		DebugService:Log("[AllocateStatPoint] Player", player.Name, "allocated", field)
+	end
+end)
+
+-- NEW: SetGuildFaction remote handler
+local SetGuildFaction = ensureRemoteEvent("SetGuildFaction")
+SetGuildFaction.OnServerEvent:Connect(function(player, guildId)
+	if type(guildId) ~= "string" or not player or not player.Parent then return end
+	local ok, guildDef = GuildService:SetGuild(player, guildId)
+	if ok then
+		CombatEvent:FireClient(player, { type = "GuildSet", guildId = guildId, guildName = guildDef.name })
+		DebugService:Log("[SetGuildFaction] Player", player.Name, "chose", guildDef.name)
+	end
+end)
+
+-- NEW: Equip remote handler
+local Equip = ensureRemoteEvent("Equip")
+Equip.OnServerEvent:Connect(function(player, itemId)
+	if type(itemId) ~= "string" or not player or not player.Parent then return end
+	local ok, item = EquipmentService:Equip(player, itemId)
+	if ok then
+		CombatEvent:FireClient(player, { type = "ItemEquipped", itemId = itemId, itemName = item.name })
+		DebugService:Log("[Equip] Player", player.Name, "equipped", item.name)
 	end
 end)
 
@@ -384,6 +412,8 @@ Players.PlayerAdded:Connect(function(player)
 	RewardService:Load(player)
 	CharacterStats:Load(player)
 	StaminaService:Load(player)
+	GuildService:LoadGuild(player)
+	EquipmentService:LoadEquipment(player)
 	PlayerStateService:OnPlayerAdded(player)
 	DebugService:Log("[PlayerAdded]", player.Name, "loaded all services")
 end)
@@ -392,6 +422,8 @@ Players.PlayerRemoving:Connect(function(player)
 	RewardService:Save(player)
 	CharacterStats:Save(player)
 	StaminaService:Clear(player)
+	GuildService:Clear(player)
+	EquipmentService:Clear(player)
 	PlayerStateService:OnPlayerRemoving(player)
 	AwakeningPuzzleService:OnPlayerRemoving(player)
 	DodgeService:Clear(player)
