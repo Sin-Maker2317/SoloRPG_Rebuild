@@ -139,13 +139,13 @@ shiftBtn.Font = Enum.Font.SourceSans
 shiftBtn.TextSize = 14
 shiftBtn.BackgroundColor3 = Color3.fromRGB(80,80,80)
 shiftBtn.Parent = frame
-shiftBtn.MouseButton1Click:Connect(function()
-    shiftLock = not shiftLock
-    shiftBtn.Text = "ShiftLock: " .. (shiftLock and "On" or "Off")
-end)
+-- (initial simple toggle removed; full behavior implemented below)
 
 -- Implement ShiftLock camera behavior for testing: lock mouse center when enabled
+-- Implement ShiftLock camera behavior for testing: lock mouse center when enabled
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local shiftConn = nil
 local function applyShiftLock(state)
     if state then
         UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
@@ -155,10 +155,47 @@ local function applyShiftLock(state)
         UserInputService.MouseIconEnabled = true
     end
 end
+
+-- full toggle: locks mouse and orients character to camera while ShiftLock is enabled
 shiftBtn.MouseButton1Click:Connect(function()
     shiftLock = not shiftLock
     shiftBtn.Text = "ShiftLock: " .. (shiftLock and "On" or "Off")
     pcall(function() applyShiftLock(shiftLock) end)
+
+    if shiftLock then
+        -- disable AutoRotate and start aligning HRP to camera each frame
+        local char = player.Character or player.CharacterAdded:Wait()
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            pcall(function() hum.AutoRotate = false end)
+        end
+        shiftConn = RunService.RenderStepped:Connect(function()
+            local cam = Workspace.CurrentCamera
+            if not cam then return end
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local look = cam.CFrame.LookVector
+                local dir = Vector3.new(look.X, 0, look.Z)
+                if dir.Magnitude > 0.001 then
+                    hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + dir)
+                end
+            end
+        end)
+    else
+        -- restore AutoRotate and stop aligning
+        if shiftConn then
+            pcall(function() shiftConn:Disconnect() end)
+            shiftConn = nil
+        end
+        local char = player.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                pcall(function() hum.AutoRotate = true end)
+            end
+        end
+        pcall(function() applyShiftLock(false) end)
+    end
 end)
 
 -- Stats label
