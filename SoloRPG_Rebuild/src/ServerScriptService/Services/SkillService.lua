@@ -1,6 +1,10 @@
 local CombatResolve = nil
 local StatsService = nil
 
+-- DEV settings: toggle to disable cooldowns and enable auto-target for quick testing
+local DEV_NO_COOLDOWNS = true
+local DEV_AUTO_TARGET = true
+
 local SkillService = {}
 
 -- Basic skill definitions (v1)
@@ -28,6 +32,7 @@ end
 function SkillService:CanUse(player, skillId)
     local skill = SKILLS[skillId]
     if not skill then return false, "Unknown skill" end
+    if DEV_NO_COOLDOWNS then return true end
     local last = playerCooldowns[player.UserId] and playerCooldowns[player.UserId][skillId]
     if last and tick() - last < skill.cd then
         return false, "Cooldown"
@@ -47,6 +52,30 @@ function SkillService:UseSkill(player, skillId, target)
     if CombatResolve and type(CombatResolve.ResolvePlayerAttack) == "function" then
         local res = CombatResolve.ResolvePlayerAttack(player, target, { baseDamage = skill.base })
         damage = (res and res.damage) or damage
+    end
+
+    -- Auto-target nearest enemy if none provided (dev mode)
+    if DEV_AUTO_TARGET and (not target or not target.Parent) then
+        local Workspace = game:GetService("Workspace")
+        local enemies = Workspace:FindFirstChild("Enemies")
+        if enemies then
+            local char = player.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local hrp = char.HumanoidRootPart
+                local best, bestDist = nil, math.huge
+                for _, e in ipairs(enemies:GetChildren()) do
+                    local eHRP = e:FindFirstChild("HumanoidRootPart")
+                    if eHRP then
+                        local d = (eHRP.Position - hrp.Position).Magnitude
+                        if d < bestDist then
+                            bestDist = d
+                            best = e
+                        end
+                    end
+                end
+                if best then target = best end
+            end
+        end
     end
 
     if target and target.FindFirstChildWhichIsA and target:FindFirstChildWhichIsA("Humanoid") then

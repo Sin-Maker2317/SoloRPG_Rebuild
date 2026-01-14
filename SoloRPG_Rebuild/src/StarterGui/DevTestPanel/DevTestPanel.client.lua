@@ -37,29 +37,25 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "DevTestPanel"
 screenGui.ResetOnSpawn = false
 
--- robust parenting: prefer player.PlayerGui when available, otherwise fall back to script parent
-local success, parentGui = pcall(function()
-    if player then return player:FindFirstChild("PlayerGui") end
-end)
-if not success or not parentGui then
-    if script.Parent and script.Parent:IsA("PlayerGui") then
-        parentGui = script.Parent
-    elseif script.Parent and script.Parent.Name == "StarterGui" then
-        -- In some runtimes StarterGui works as a container for LocalScript UI
-        parentGui = player and player:FindFirstChild("PlayerGui") or script.Parent
-    else
-        parentGui = script.Parent
-    end
+-- robust parenting: prefer player.PlayerGui when available
+local parentGui = nil
+if player and player:FindFirstChild("PlayerGui") then
+    parentGui = player.PlayerGui
+elseif script.Parent and script.Parent:IsA("PlayerGui") then
+    parentGui = script.Parent
+else
+    parentGui = player and player:FindFirstChild("PlayerGui") or script.Parent
 end
 screenGui.Parent = parentGui
 
--- debug indicator: visible only in output to confirm LocalScript executed
-pcall(function() print("DevTestPanel: LocalScript loaded; parentGui=", tostring(parentGui)) end)
+-- debug print
+pcall(function() print("DevTestPanel loaded. parentGui=", tostring(parentGui)) end)
+
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0,300,0,220)
-frame.Position = UDim2.new(0.5, -150, 0, 8)
-frame.AnchorPoint = Vector2.new(0,0)
+frame.Size = UDim2.new(0,220,0,180)
+frame.AnchorPoint = Vector2.new(1,0)
+frame.Position = UDim2.new(1, -10, 0, 8)
 frame.BackgroundTransparency = 0.2
 frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
 frame.BorderSizePixel = 0
@@ -77,6 +73,7 @@ title.Parent = frame
 local y = 34
 
 local rows = {}
+-- create compact rows on the right UI
 for i=1,3 do
     local rowFrame = Instance.new("Frame")
     rowFrame.Size = UDim2.new(1,-12,0,36)
@@ -133,7 +130,6 @@ for i=1,3 do
     y = y + 40
 end
 
--- Shift Lock toggle
 local shiftLock = false
 local shiftBtn = Instance.new("TextButton")
 shiftBtn.Size = UDim2.new(0.4, -6, 0, 28)
@@ -146,6 +142,23 @@ shiftBtn.Parent = frame
 shiftBtn.MouseButton1Click:Connect(function()
     shiftLock = not shiftLock
     shiftBtn.Text = "ShiftLock: " .. (shiftLock and "On" or "Off")
+end)
+
+-- Implement ShiftLock camera behavior for testing: lock mouse center when enabled
+local UserInputService = game:GetService("UserInputService")
+local function applyShiftLock(state)
+    if state then
+        UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        UserInputService.MouseIconEnabled = false
+    else
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        UserInputService.MouseIconEnabled = true
+    end
+end
+shiftBtn.MouseButton1Click:Connect(function()
+    shiftLock = not shiftLock
+    shiftBtn.Text = "ShiftLock: " .. (shiftLock and "On" or "Off")
+    pcall(function() applyShiftLock(shiftLock) end)
 end)
 
 -- Stats label
@@ -179,25 +192,23 @@ end)
 
 -- cooldown tracking and helper
 local cooldowns = {}
-local function getCooldownForSkill(id)
-    if DEFAULT_COOLDOWNS[id] then return DEFAULT_COOLDOWNS[id] end
-    return 2
-end
-
 local function triggerSkill(id)
     if not id or id == "" then return end
-    if cooldowns[id] and cooldowns[id] > 0 then return end
+    -- for testing: no client cooldowns; server may still control damage timing
     if useSkill then
         pcall(function() useSkill:FireServer(id) end)
     end
-    cooldowns[id] = getCooldownForSkill(id)
-    -- find overlay for matching row and enable
+    -- visual feedback: briefly flash overlay
     for _, r in ipairs(rows) do
         local sid = r.skillBox.Text ~= "" and r.skillBox.Text or r.skillBox.PlaceholderText
         if sid == id then
             r.overlay.Visible = true
-            r.overlay.Text = tostring(math.ceil(cooldowns[id]))
+            r.overlay.Text = "!"
             r.testBtn.BackgroundColor3 = Color3.fromRGB(90,90,90)
+            delay(0.3, function()
+                r.overlay.Visible = false
+                r.testBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+            end)
         end
     end
 end
@@ -243,23 +254,5 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         triggerSkill(sid)
     end
 end)
-
--- heartbeat cooldown updater
-RunService.Heartbeat:Connect(function(dt)
-    for id, t in pairs(cooldowns) do
-        if t > 0 then
-            cooldowns[id] = math.max(0, t - dt)
-            for _, r in ipairs(rows) do
-                local sid = r.skillBox.Text ~= "" and r.skillBox.Text or r.skillBox.PlaceholderText
-                if sid == id then
-                    r.overlay.Text = tostring(math.ceil(cooldowns[id]))
-                    if cooldowns[id] <= 0 then
-                        r.overlay.Visible = false
-                        r.testBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
-                    end
-                end
-            end
-        end
-    end
-end)
+-- no heartbeat cooldown updater in dev panel (server handles damage timing)
 
