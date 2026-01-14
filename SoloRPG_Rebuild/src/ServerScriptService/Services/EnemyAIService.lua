@@ -91,7 +91,7 @@ spawn(function()
     local enemiesFolder = Workspace:FindFirstChild("Enemies")
     if enemiesFolder then
         for _, m in ipairs(enemiesFolder:GetChildren()) do
-            if m:GetAttribute and m:GetAttribute("IsEnemy") then
+            if m.GetAttribute and m:GetAttribute("IsEnemy") then
                 pcall(function() EnemyAIService:AttachToEnemy(m) end)
             end
         end
