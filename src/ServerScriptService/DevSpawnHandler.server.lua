@@ -76,8 +76,41 @@ local function onPlayerAdded(player)
         -- Teleport to dev platform
         hrp.CFrame = CFrame.new(Vector3.new(0, 7, 0))
         
-        -- Spawn test dummy NPC
-        local ok, EnemyService = pcall(function()
+        -- Spawn test enemies continuously (for testing combat)
+        local RewardService = require(game:GetService("ServerScriptService"):WaitForChild("Services"):WaitForChild("RewardService"))
+        local MobService = require(game:GetService("ServerScriptService"):WaitForChild("Services"):WaitForChild("MobService"))
+        
+        local spawnActive = true
+        character.Humanoid.Died:Connect(function()
+            spawnActive = false
+        end)
+        
+        -- Spawn wave of enemies
+        spawn(function()
+            while spawnActive do
+                task.wait(8) -- Spawn every 8 seconds
+                
+                -- Spawn 1-2 random mobs around the dev area
+                for i = 1, math.random(1, 2) do
+                    local spawnPos = Vector3.new(math.random(-15, 15), 5, math.random(-15, 15))
+                    local mob = MobService:SpawnRandom(spawnPos, function(mobKey, mobConfig, model)
+                        -- On mob death: award player XP
+                        local baseXP = 50
+                        local coinReward = 25
+                        RewardService:Add(player, baseXP, coinReward)
+                    end)
+                    
+                    if mob then
+                        local mobHum = mob:FindFirstChildOfClass("Humanoid")
+                        if mobHum then
+                            mobHum.Health = mobConfig.maxHealth
+                        end
+                    end
+                end
+            end
+        end)
+    end)
+end
             return require(script.Parent:WaitForChild("Services"):WaitForChild("EnemyService"))
         end)
         

@@ -232,14 +232,14 @@ SetGuildFaction.OnServerEvent:Connect(function(player, guildId)
 	end
 end)
 
--- NEW: Equip remote handler
-local Equip = ensureRemoteEvent("Equip")
-Equip.OnServerEvent:Connect(function(player, itemId)
+-- NEW: EquipItem remote handler (for equipment panel)
+local EquipItem = ensureRemoteEvent("EquipItem")
+EquipItem.OnServerEvent:Connect(function(player, itemId)
 	if type(itemId) ~= "string" or not player or not player.Parent then return end
 	local ok, item = EquipmentService:Equip(player, itemId)
 	if ok then
 		CombatEvent:FireClient(player, { type = "ItemEquipped", itemId = itemId, itemName = item.name })
-		DebugService:Log("[Equip] Player", player.Name, "equipped", item.name)
+		DebugService:Log("[EquipItem] Player", player.Name, "equipped", item.name)
 	end
 end)
 
@@ -295,82 +295,127 @@ function GetSystemStatus.OnServerInvoke(player)
 	return SystemService:GetSystemStatus()
 end
 
--- NEW: UseSkill remote handler
+-- NEW: GetEquipmentSnapshot remote function for equipment panel
+local GetEquipmentSnapshot = ensureRemoteFunction("GetEquipmentSnapshot")
+function GetEquipmentSnapshot.OnServerInvoke(player)
+	local equipped = EquipmentService:GetEquipped(player)
+	local bonuses = EquipmentService:CalculateTotalBonuses(player)
+	return { equipped = equipped, bonuses = bonuses }
+end
+
+-- NEW: UseSkill remote handler with auto-targeting
 local UseSkill = ensureRemoteEvent("UseSkill")
-UseSkill.OnServerEvent:Connect(function(player, skillId, targetEnemy)
+UseSkill.OnServerEvent:Connect(function(player, skillId)
 	if not player or not player.Parent or type(skillId) ~= "string" then return end
 	
-	local stamina = StaminaService:Get(player)
+	-- Check stamina and cooldown
 	local ok, skillDef = SkillService:UseSkill(player, skillId)
-	
-	if ok then
-		StaminaService:Use(player, skillDef.staminaCost)
-		
-		-- Apply skill effects if there's a target
-		if targetEnemy and skillDef.damage > 0 then
-			CombatService:PlayerSkillAttack(player, targetEnemy, skillDef)
-		end
-		
-		-- Handle Guard mechanic activation
-		if skillId == "Guard" then
-			GuardService:StartGuard(player)
-		end
-		
-		CombatEvent:FireClient(player, { 
-			type = "SkillUsed", 
-			skillId = skillId, 
-			damage = skillDef.damage,
-			cooldown = skillDef.cooldown
-		})
-		DebugService:Log("[UseSkill] Player", player.Name, "used", skillId)
-	else
-		CombatEvent:FireClient(player, { type = "SkillFailed", reason = skillDef })
-	end
-end)
-
--- IMPROVED: Attack remote - server-side validation
-Attack.OnServerEvent:Connect(function(player)
-	if not player or not player.Parent then return end
-	
-	-- Check if player is in dodge window (server-side dodge protection)
-	if DodgeService:IsInDodgeWindow(player) then
-		-- Player in opponent's dodge window? Damage negated handled on damage calc
-		DebugService:Log("[Attack] Target would be in dodge window")
+	if not ok then
+		CombatEvent:FireClient(player, { type = "SkillFailed", reason = "Cooldown or invalid skill" })
+		return
 	end
 	
-	-- Try to find target (lock-on target or nearest)
-	-- For now, just apply base damage to any nearby enemy
-	-- TODO: implement proper target validation
+	-- Check stamina cost
+	local currentStamina = StaminaService:Get(player)
+	if currentStamina < skillDef.staminaCost then
+		CombatEvent:FireClient(player, { type = "SkillFailed", reason = "Insufficient stamina" })
+		return
+	end
+	
+	-- Deduct stamina
+	StaminaService:Use(player, skillDef.staminaCost)
+	
+	-- Apply skill effects
 	local character = player.Character
-	if character and character:FindFirstChild("Humanoid") then
+	if character then
 		local hrp = character:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			local enemies = game:GetService("Workspace"):FindFirstChild("Enemies")
-			if enemies then
-				local nearest = nil
-				local minDist = 15 -- attack range
-				for _, enemy in ipairs(enemies:GetChildren()) do
-					local eHRP = enemy:FindFirstChild("HumanoidRootPart")
-					if eHRP then
-						local dist = (eHRP.Position - hrp.Position).Magnitude
-						if dist < minDist then
-							minDist = dist
-							nearest = enemy
+		if hrp and skillDef.damage > 0 then
+			-- Find target
+			local target = findNearestEnemy(hrp, 50)
+			if target then
+				local stats = CharacterStats:GetSnapshot(player)
+				local damage = CombatService:CalculatePlayerDamage(stats, skillDef.damage)
+				
+				-- Handle special skill effects
+				if skillId == "GuardBreak" then
+					if GuardService:IsGuarding(target) then
+						local targetHum = target:FindFirstChildOfClass("Humanoid")
+						if targetHum then
+							StunService:Stun(targetHum, 1.0)
+							GuardService:StopGuard(target)
+							damage = damage * 1.5
 						end
 					end
 				end
 				
-				if nearest then
-					local humanoid = nearest:FindFirstChildOfClass("Humanoid")
-					if humanoid and humanoid.Health > 0 then
-						CombatService:DealDamage(humanoid)
-						CombatEvent:FireClient(player, { type = "HitConfirm", damage = CombatService.BASE_DAMAGE })
-						DebugService:Log("[Attack] Hit enemy:", nearest.Name)
-					end
+				local targetHum = target:FindFirstChildOfClass("Humanoid")
+				if targetHum then
+					targetHum:TakeDamage(damage)
+					CombatEvent:FireClient(player, { type = "SkillHit", skillId = skillId, damage = damage, target = target.Name })
 				end
 			end
 		end
 	end
+	
+	CombatEvent:FireClient(player, { 
+		type = "SkillUsed", 
+		skillId = skillId, 
+		damage = skillDef.damage,
+		cooldown = skillDef.cooldown
+	})
+	DebugService:Log("[UseSkill]", player.Name, "used", skillId, "| Stamina remaining:", StaminaService:Get(player))
+end)
+
+-- HELPER: Find nearest enemy to player
+local function findNearestEnemy(playerHRP, range)
+	range = range or 40
+	local nearest = nil
+	local minDist = range
+	
+	local enemies = game:GetService("Workspace"):FindFirstChild("Enemies")
+	if not enemies then return nil end
+	
+	for _, enemy in ipairs(enemies:GetChildren()) do
+		local eHRP = enemy:FindFirstChild("HumanoidRootPart")
+		local eHum = enemy:FindFirstChildOfClass("Humanoid")
+		if eHRP and eHum and eHum.Health > 0 then
+			local dist = (eHRP.Position - playerHRP.Position).Magnitude
+			if dist < minDist then
+				minDist = dist
+				nearest = enemy
+			end
+		end
+	end
+	
+	return nearest
+end
+
+-- IMPROVED: Attack remote - server-side validation with proper damage
+Attack.OnServerEvent:Connect(function(player)
+	if not player or not player.Parent then return end
+	
+	local character = player.Character
+	if not character then return end
+	
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	
+	local nearest = findNearestEnemy(hrp, 40)
+	if not nearest then return end
+	
+	local humanoid = nearest:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then return end
+	
+	-- Calculate damage with proper scaling
+	local stats = CharacterStats:GetSnapshot(player)
+	local damage = CombatService:CalculatePlayerDamage(stats, CombatService.BASE_DAMAGE)
+	
+	-- Apply damage
+	humanoid:TakeDamage(damage)
+	
+	-- Notify client of hit
+	CombatEvent:FireClient(player, { type = "HitConfirm", damage = damage, targetName = nearest.Name })
+	DebugService:Log("[Attack]", player.Name, "hit", nearest.Name, "for", damage, "damage")
 end)
 
 GetCombatStats.OnServerInvoke = function(player)
