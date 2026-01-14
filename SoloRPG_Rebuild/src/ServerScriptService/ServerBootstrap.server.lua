@@ -104,38 +104,27 @@ if attackEvent and attackEvent:IsA("RemoteEvent") then
 end
 
 print("[ServerBootstrap] remotes ensured and core services wired")
+-- prefer safeRequire (defined above) to avoid WaitForChild infinite-yield
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local DebugService =
-	require(script.Parent:WaitForChild("Services"):WaitForChild("DebugService"))
+local DebugService = safeRequire("DebugService")
+if not DebugService then
+    DebugService = { Log = function(...) print('[DebugService]', ...) end }
+end
 
-local PlayerStateService =
-	require(script.Parent:WaitForChild("Services"):WaitForChild("PlayerStateService"))
+local PlayerStateService = safeRequire("PlayerStateService") or { Get = function() return { state = "Town" } end }
+local WorldService = safeRequire("WorldService") or { Init = function() end }
+local CombatService = safeRequire("CombatService") or {}
+local ProfileMemoryService = safeRequire("ProfileMemoryService") or {}
+local RewardService = safeRequire("RewardService") or { Get = function() return { xp = 0, coins = 0 } end }
+local AwakeningDeathService = safeRequire("AwakeningDeathService") or { Init = function() end }
+local AwakeningPuzzleService = safeRequire("AwakeningPuzzleService") or { Init = function() end }
+local ProgressService = safeRequire("ProgressService") or { Get = function() return { awakened = false, pathChoice = nil, faction = nil } end, SetPathChoice = function() end }
+local QuestService = safeRequire("QuestService") or { Snapshot = function() return {} end }
+local InventoryService = safeRequire("InventoryService") or { List = function() return {} end }
 
-local WorldService =
-	require(script.Parent:WaitForChild("Services"):WaitForChild("WorldService"))
-
-local CombatService =
-	require(script.Parent:WaitForChild("Services"):WaitForChild("CombatService"))
-
-local ProfileMemoryService =
-	require(script.Parent:WaitForChild("Services"):WaitForChild("ProfileMemoryService"))
-
-local RewardService =
-	require(script.Parent:WaitForChild("Services"):WaitForChild("RewardService"))
-local AwakeningDeathService =
-	require(script.Parent:WaitForChild("Services"):WaitForChild("AwakeningDeathService"))
-local AwakeningPuzzleService =
-	require(script.Parent:WaitForChild("Services"):WaitForChild("AwakeningPuzzleService"))
-local ProgressService =
-	require(script.Parent:WaitForChild("Services"):WaitForChild("ProgressService"))
-local QuestService =
-	require(script.Parent:WaitForChild("Services"):WaitForChild("QuestService"))
-local InventoryService =
-	require(script.Parent:WaitForChild("Services"):WaitForChild("InventoryService"))
-
-DebugService:Log("[ServerBootstrap] STARTING...")
+DebugService.Log("[ServerBootstrap] STARTING...")
 
 WorldService:Init()
 AwakeningDeathService:Init()
