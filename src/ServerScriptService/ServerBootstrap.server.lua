@@ -211,6 +211,30 @@ RequestDodge.OnServerEvent:Connect(function(player)
 	end
 end)
 
+-- HELPER: Find nearest enemy to player (MUST BE BEFORE UseSkill)
+local function findNearestEnemy(playerHRP, range)
+	range = range or 40
+	local nearest = nil
+	local minDist = range
+	
+	local enemies = game:GetService("Workspace"):FindFirstChild("Enemies")
+	if not enemies then return nil end
+	
+	for _, enemy in ipairs(enemies:GetChildren()) do
+		local eHRP = enemy:FindFirstChild("HumanoidRootPart")
+		local eHum = enemy:FindFirstChildOfClass("Humanoid")
+		if eHRP and eHum and eHum.Health > 0 then
+			local dist = (eHRP.Position - playerHRP.Position).Magnitude
+			if dist < minDist then
+				minDist = dist
+				nearest = enemy
+			end
+		end
+	end
+	
+	return nearest
+end
+
 -- IMPROVED: Allocate stat point using CharacterStats
 AllocateStatPoint.OnServerEvent:Connect(function(player, field)
 	if type(field) ~= "string" or not player or not player.Parent then return end
@@ -365,30 +389,6 @@ UseSkill.OnServerEvent:Connect(function(player, skillId)
 	})
 	DebugService:Log("[UseSkill]", player.Name, "used", skillId, "| Stamina remaining:", StaminaService:Get(player))
 end)
-
--- HELPER: Find nearest enemy to player
-local function findNearestEnemy(playerHRP, range)
-	range = range or 40
-	local nearest = nil
-	local minDist = range
-	
-	local enemies = game:GetService("Workspace"):FindFirstChild("Enemies")
-	if not enemies then return nil end
-	
-	for _, enemy in ipairs(enemies:GetChildren()) do
-		local eHRP = enemy:FindFirstChild("HumanoidRootPart")
-		local eHum = enemy:FindFirstChildOfClass("Humanoid")
-		if eHRP and eHum and eHum.Health > 0 then
-			local dist = (eHRP.Position - playerHRP.Position).Magnitude
-			if dist < minDist then
-				minDist = dist
-				nearest = enemy
-			end
-		end
-	end
-	
-	return nearest
-end
 
 -- IMPROVED: Attack remote - server-side validation with proper damage
 Attack.OnServerEvent:Connect(function(player)

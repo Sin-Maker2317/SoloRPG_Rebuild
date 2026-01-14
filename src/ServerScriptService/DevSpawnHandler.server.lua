@@ -111,13 +111,8 @@ local function onPlayerAdded(player)
         end)
     end)
 end
-            return require(script.Parent:WaitForChild("Services"):WaitForChild("EnemyService"))
-        end)
-        
-        if ok and EnemyService and EnemyService.SpawnDummyEnemy then
-            pcall(function()
-                -- Spawn dummy in front of player
-                local dummyPos = hrp.Position + hrp.CFrame.LookVector * 15 - Vector3.new(0, 1, 0)
+
+Players.PlayerAdded:Connect(onPlayerAdded)
                 EnemyService.SpawnDummyEnemy(dummyPos)
             end)
         end
