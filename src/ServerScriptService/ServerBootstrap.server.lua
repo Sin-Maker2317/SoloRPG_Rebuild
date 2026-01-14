@@ -62,6 +62,12 @@ local AbilityService =
 local WorldGatesService =
 	require(script.Parent:WaitForChild("Services"):WaitForChild("WorldGatesService"))
 
+local ArenaService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("ArenaService"))
+
+local LeaderboardService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("LeaderboardService"))
+
 DebugService:Log("[ServerBootstrap] STARTING...")
 
 WorldService:Init()
@@ -239,6 +245,39 @@ StartGate.OnServerEvent:Connect(function(player, gateId)
 		CombatEvent:FireClient(player, { type = "GateFailed", reason = "Cannot start gate" })
 	end
 end)
+
+-- NEW: CreateMatch remote handler for PvP arenas
+local CreateMatch = ensureRemoteEvent("CreateMatch")
+CreateMatch.OnServerEvent:Connect(function(player, arenaId, opponentIds)
+	if type(arenaId) ~= "string" or not player or not player.Parent then return end
+	
+	local opponents = {}
+	if opponentIds and type(opponentIds) == "table" then
+		for _, id in ipairs(opponentIds) do
+			local opponent = game:GetService("Players"):FindFirstChild(id) or game:GetService("Players"):FindFirstChildWhichIsA("Player", true)
+			if opponent and opponent.UserId == tonumber(id) then
+				table.insert(opponents, opponent)
+			end
+		end
+	end
+	
+	local ok, result = ArenaService:CreateMatch(arenaId, player, opponents)
+	if ok then
+		local matchId = result.matchId
+		CombatEvent:FireClient(player, { type = "MatchCreated", matchId = matchId, arena = result.arena.name })
+		DebugService:Log("[CreateMatch] Player", player.Name, "created match:", matchId)
+	else
+		CombatEvent:FireClient(player, { type = "MatchFailed", reason = result })
+	end
+end)
+
+-- NEW: GetLeaderboard remote function for rankings
+local GetLeaderboard = ensureRemoteFunction("GetLeaderboard")
+function GetLeaderboard.OnServerInvoke(player, leaderboardType, limit)
+	if type(leaderboardType) ~= "string" then return {} end
+	
+	return LeaderboardService:GetTopPlayers(leaderboardType, limit or 10)
+end
 
 -- NEW: UseSkill remote handler
 local UseSkill = ensureRemoteEvent("UseSkill")
