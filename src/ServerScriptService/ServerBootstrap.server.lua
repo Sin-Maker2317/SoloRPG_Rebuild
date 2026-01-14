@@ -41,6 +41,12 @@ local StaminaService =
 local SkillService =
 	require(script.Parent:WaitForChild("Services"):WaitForChild("SkillService"))
 
+local StunService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("StunService"))
+
+local GuardService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("GuardService"))
+
 DebugService:Log("[ServerBootstrap] STARTING...")
 
 WorldService:Init()
@@ -186,7 +192,7 @@ end)
 
 -- NEW: UseSkill remote handler
 local UseSkill = ensureRemoteEvent("UseSkill")
-UseSkill.OnServerEvent:Connect(function(player, skillId)
+UseSkill.OnServerEvent:Connect(function(player, skillId, targetEnemy)
 	if not player or not player.Parent or type(skillId) ~= "string" then return end
 	
 	local stamina = StaminaService:Get(player)
@@ -194,6 +200,17 @@ UseSkill.OnServerEvent:Connect(function(player, skillId)
 	
 	if ok then
 		StaminaService:Use(player, skillDef.staminaCost)
+		
+		-- Apply skill effects if there's a target
+		if targetEnemy and skillDef.damage > 0 then
+			CombatService:PlayerSkillAttack(player, targetEnemy, skillDef)
+		end
+		
+		-- Handle Guard mechanic activation
+		if skillId == "Guard" then
+			GuardService:StartGuard(player)
+		end
+		
 		CombatEvent:FireClient(player, { 
 			type = "SkillUsed", 
 			skillId = skillId, 
