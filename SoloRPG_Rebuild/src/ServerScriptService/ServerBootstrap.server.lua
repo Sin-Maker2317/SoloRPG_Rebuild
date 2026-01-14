@@ -113,15 +113,22 @@ if not DebugService then
     DebugService = { Log = function(...) print('[DebugService]', ...) end }
 end
 
-local PlayerStateService = safeRequire("PlayerStateService") or { Get = function() return { state = "Town" } end }
+local PlayerStateService = safeRequire("PlayerStateService") or {
+	Get = function() return { state = "Town" } end,
+	Set = function() end,
+	Init = function() end,
+	OnPlayerAdded = function() end,
+	OnPlayerRemoving = function() end,
+	Save = function() end,
+}
 local WorldService = safeRequire("WorldService") or { Init = function() end }
-local CombatService = safeRequire("CombatService") or {}
-local ProfileMemoryService = safeRequire("ProfileMemoryService") or {}
-local RewardService = safeRequire("RewardService") or { Get = function() return { xp = 0, coins = 0 } end }
+local CombatService = safeRequire("CombatService") or { DealDamage = function() end }
+local ProfileMemoryService = safeRequire("ProfileMemoryService") or { SetGuildFaction = function() end }
+local RewardService = safeRequire("RewardService") or { Get = function() return { xp = 0, coins = 0 } end, Load = function() end, Save = function() end }
 local AwakeningDeathService = safeRequire("AwakeningDeathService") or { Init = function() end }
-local AwakeningPuzzleService = safeRequire("AwakeningPuzzleService") or { Init = function() end }
-local ProgressService = safeRequire("ProgressService") or { Get = function() return { awakened = false, pathChoice = nil, faction = nil } end, SetPathChoice = function() end }
-local QuestService = safeRequire("QuestService") or { Snapshot = function() return {} end }
+local AwakeningPuzzleService = safeRequire("AwakeningPuzzleService") or { Init = function() end, OnPlayerRemoving = function() end }
+local ProgressService = safeRequire("ProgressService") or { Get = function() return { awakened = false, pathChoice = nil, faction = nil } end, SetPathChoice = function() end, Save = function() end, SetFaction = function() end }
+local QuestService = safeRequire("QuestService") or { Snapshot = function() return {} end, TryClaim = function() return true, "" end }
 local InventoryService = safeRequire("InventoryService") or { List = function() return {} end }
 
 DebugService.Log("[ServerBootstrap] STARTING...")
@@ -201,10 +208,12 @@ end)
 
 AllocateStatPoint.OnServerEvent:Connect(function(player, field)
 	if type(field) ~= "string" then return end
-	local PlayerStatsService = require(script.Parent:WaitForChild("Services"):WaitForChild("PlayerStatsService"))
-	pcall(function()
-		PlayerStatsService:AllocatePoint(player, field)
-	end)
+	local PlayerStatsService = safeRequire("PlayerStatsService") or safeRequire("StatsService")
+	if PlayerStatsService and type(PlayerStatsService.AllocatePoint) == "function" then
+		pcall(function()
+			PlayerStatsService:AllocatePoint(player, field)
+		end)
+	end
 end)
 
 -- === REMOTES LOGIC ===
@@ -233,9 +242,12 @@ GetInventory.OnServerInvoke = function(player)
 end
 
 GetCombatStats.OnServerInvoke = function(player)
-	local PlayerStatsService = require(script.Parent:WaitForChild("Services"):WaitForChild("PlayerStatsService"))
-	local p = PlayerStatsService:Get(player)
-	return { defense = p.def or 0, points = p.points or 0 }
+	local PlayerStatsService = safeRequire("PlayerStatsService") or safeRequire("StatsService")
+	if PlayerStatsService and type(PlayerStatsService.GetStats or PlayerStatsService.Get) == "function" then
+		local p = (PlayerStatsService.GetStats and PlayerStatsService:GetStats(player)) or (PlayerStatsService.Get and PlayerStatsService:Get(player))
+		return { defense = (p and (p.def or p.Defense or 0)) or 0, points = (p and (p.points or p.Points or 0)) or 0 }
+	end
+	return { defense = 0, points = 0 }
 end
 
 ChoosePath.OnServerEvent:Connect(function(player, choice)
