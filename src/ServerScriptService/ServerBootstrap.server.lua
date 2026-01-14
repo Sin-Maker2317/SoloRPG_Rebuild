@@ -53,6 +53,15 @@ local GuildService =
 local EquipmentService =
 	require(script.Parent:WaitForChild("Services"):WaitForChild("EquipmentService"))
 
+local BossService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("BossService"))
+
+local AbilityService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("AbilityService"))
+
+local WorldGatesService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("WorldGatesService"))
+
 DebugService:Log("[ServerBootstrap] STARTING...")
 
 WorldService:Init()
@@ -215,6 +224,19 @@ Equip.OnServerEvent:Connect(function(player, itemId)
 	if ok then
 		CombatEvent:FireClient(player, { type = "ItemEquipped", itemId = itemId, itemName = item.name })
 		DebugService:Log("[Equip] Player", player.Name, "equipped", item.name)
+	end
+end)
+
+-- NEW: StartGate remote handler for boss encounters
+local StartGate = ensureRemoteEvent("StartGate")
+StartGate.OnServerEvent:Connect(function(player, gateId)
+	if type(gateId) ~= "string" or not player or not player.Parent then return end
+	local ok, gateDef = WorldGatesService:StartGate(gateId, player)
+	if ok then
+		CombatEvent:FireClient(player, { type = "GateStarted", gateId = gateId, gateName = gateDef.name })
+		DebugService:Log("[StartGate] Player", player.Name, "entered", gateDef.name)
+	else
+		CombatEvent:FireClient(player, { type = "GateFailed", reason = "Cannot start gate" })
 	end
 end)
 
