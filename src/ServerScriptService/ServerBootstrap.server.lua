@@ -68,6 +68,15 @@ local ArenaService =
 local LeaderboardService =
 	require(script.Parent:WaitForChild("Services"):WaitForChild("LeaderboardService"))
 
+local SystemService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("SystemService"))
+
+local NotificationService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("NotificationService"))
+
+local CacheService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("CacheService"))
+
 DebugService:Log("[ServerBootstrap] STARTING...")
 
 WorldService:Init()
@@ -121,6 +130,7 @@ local SetGuildFaction = ensureRemoteEvent("SetGuildFaction")
 local CompleteTutorial = ensureRemoteEvent("CompleteTutorial")
 local UseTerminal = ensureRemoteEvent("UseTerminal")
 local ClaimQuest = ensureRemoteEvent("ClaimQuest")
+local Notification = ensureRemoteEvent("Notification")
 
 ClientLog.OnServerEvent:Connect(function(player, msg)
 	DebugService:Log("[ClientLog]", player.Name, msg)
@@ -277,6 +287,12 @@ function GetLeaderboard.OnServerInvoke(player, leaderboardType, limit)
 	if type(leaderboardType) ~= "string" then return {} end
 	
 	return LeaderboardService:GetTopPlayers(leaderboardType, limit or 10)
+end
+
+-- NEW: GetSystemStatus remote function for monitoring
+local GetSystemStatus = ensureRemoteFunction("GetSystemStatus")
+function GetSystemStatus.OnServerInvoke(player)
+	return SystemService:GetSystemStatus()
 end
 
 -- NEW: UseSkill remote handler
