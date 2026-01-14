@@ -26,6 +26,7 @@ function RewardService:Add(player, xp, coins)
 	local r = self:Get(player)
 	r.xp += xp
 	r.coins += coins
+	self:Save(player) -- Auto-save after reward
 	return r
 end
 

@@ -29,6 +29,18 @@ local QuestService =
 local InventoryService =
 	require(script.Parent:WaitForChild("Services"):WaitForChild("InventoryService"))
 
+local CharacterStats =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("CharacterStats"))
+
+local DodgeService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("DodgeService"))
+
+local StaminaService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("StaminaService"))
+
+local SkillService =
+	require(script.Parent:WaitForChild("Services"):WaitForChild("SkillService"))
+
 DebugService:Log("[ServerBootstrap] STARTING...")
 
 WorldService:Init()
@@ -104,20 +116,10 @@ RequestDodge.OnServerEvent:Connect(function(player)
 	end)
 end)
 
-AllocateStatPoint.OnServerEvent:Connect(function(player, field)
-	if type(field) ~= "string" then return end
-	local PlayerStatsService = require(script.Parent:WaitForChild("Services"):WaitForChild("PlayerStatsService"))
-	pcall(function()
-		PlayerStatsService:AllocatePoint(player, field)
-	end)
-end)
-
 -- === REMOTES LOGIC ===
 GetPlayerState.OnServerInvoke = function(player)
 	return PlayerStateService:Get(player)
 end
-
--- RewardService already required above; avoid duplicate require
 
 GetRewards.OnServerInvoke = function(player)
 	local r = RewardService:Get(player)
@@ -136,6 +138,118 @@ end
 GetInventory.OnServerInvoke = function(player)
 	return InventoryService:List(player)
 end
+
+-- NEW: GetCombatStats returns character stats + stamina
+local GetStatsSnapshot = ensureRemoteFunction("GetStatsSnapshot")
+GetStatsSnapshot.OnServerInvoke = function(player)
+	local stats = CharacterStats:GetSnapshot(player)
+	local stamina = StaminaService:Snapshot(player)
+	return {
+		character = stats,
+		stamina = stamina
+	}
+end
+
+-- NEW: Stamina remote sync
+local GetStamina = ensureRemoteFunction("GetStamina")
+GetStamina.OnServerInvoke = function(player)
+	return StaminaService:Snapshot(player)
+end
+
+-- IMPROVED: RequestDodge with server-side validation
+RequestDodge.OnServerEvent:Connect(function(player)
+	if not player or not player.Parent then return end
+	
+	local stamina = StaminaService:Get(player)
+	if not DodgeService:CanDodge(player, stamina) then
+		CombatEvent:FireClient(player, { type = "DodgeFailed", reason = "No stamina or on cooldown" })
+		return
+	end
+	
+	local dodgeSuccess, staminaCost = DodgeService:StartDodge(player, function() return StaminaService:Get(player) end)
+	if dodgeSuccess then
+		StaminaService:Use(player, staminaCost)
+		CombatEvent:FireClient(player, { type = "DodgeStarted", duration = DodgeService:GetDodgeDuration() })
+		DebugService:Log("[RequestDodge] Player", player.Name, "dodged; stamina now:", StaminaService:Get(player))
+	end
+end)
+
+-- IMPROVED: Allocate stat point using CharacterStats
+AllocateStatPoint.OnServerEvent:Connect(function(player, field)
+	if type(field) ~= "string" or not player or not player.Parent then return end
+	local ok = CharacterStats:AllocatePoint(player, field)
+	if ok then
+		CombatEvent:FireClient(player, { type = "StatAllocated", field = field })
+		DebugService:Log("[AllocateStatPoint] Player", player.Name, "allocated", field)
+	end
+end)
+
+-- NEW: UseSkill remote handler
+local UseSkill = ensureRemoteEvent("UseSkill")
+UseSkill.OnServerEvent:Connect(function(player, skillId)
+	if not player or not player.Parent or type(skillId) ~= "string" then return end
+	
+	local stamina = StaminaService:Get(player)
+	local ok, skillDef = SkillService:UseSkill(player, skillId)
+	
+	if ok then
+		StaminaService:Use(player, skillDef.staminaCost)
+		CombatEvent:FireClient(player, { 
+			type = "SkillUsed", 
+			skillId = skillId, 
+			damage = skillDef.damage,
+			cooldown = skillDef.cooldown
+		})
+		DebugService:Log("[UseSkill] Player", player.Name, "used", skillId)
+	else
+		CombatEvent:FireClient(player, { type = "SkillFailed", reason = skillDef })
+	end
+end)
+
+-- IMPROVED: Attack remote - server-side validation
+Attack.OnServerEvent:Connect(function(player)
+	if not player or not player.Parent then return end
+	
+	-- Check if player is in dodge window (server-side dodge protection)
+	if DodgeService:IsInDodgeWindow(player) then
+		-- Player in opponent's dodge window? Damage negated handled on damage calc
+		DebugService:Log("[Attack] Target would be in dodge window")
+	end
+	
+	-- Try to find target (lock-on target or nearest)
+	-- For now, just apply base damage to any nearby enemy
+	-- TODO: implement proper target validation
+	local character = player.Character
+	if character and character:FindFirstChild("Humanoid") then
+		local hrp = character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			local enemies = game:GetService("Workspace"):FindFirstChild("Enemies")
+			if enemies then
+				local nearest = nil
+				local minDist = 15 -- attack range
+				for _, enemy in ipairs(enemies:GetChildren()) do
+					local eHRP = enemy:FindFirstChild("HumanoidRootPart")
+					if eHRP then
+						local dist = (eHRP.Position - hrp.Position).Magnitude
+						if dist < minDist then
+							minDist = dist
+							nearest = enemy
+						end
+					end
+				end
+				
+				if nearest then
+					local humanoid = nearest:FindFirstChildOfClass("Humanoid")
+					if humanoid and humanoid.Health > 0 then
+						CombatService:DealDamage(humanoid)
+						CombatEvent:FireClient(player, { type = "HitConfirm", damage = CombatService.BASE_DAMAGE })
+						DebugService:Log("[Attack] Hit enemy:", nearest.Name)
+					end
+				end
+			end
+		end
+	end
+end)
 
 GetCombatStats.OnServerInvoke = function(player)
 	local PlayerStatsService = require(script.Parent:WaitForChild("Services"):WaitForChild("PlayerStatsService"))
@@ -251,13 +365,20 @@ AwakeningPuzzleService:Init(
 
 Players.PlayerAdded:Connect(function(player)
 	RewardService:Load(player)
+	CharacterStats:Load(player)
+	StaminaService:Load(player)
 	PlayerStateService:OnPlayerAdded(player)
+	DebugService:Log("[PlayerAdded]", player.Name, "loaded all services")
 end)
 
 Players.PlayerRemoving:Connect(function(player)
 	RewardService:Save(player)
+	CharacterStats:Save(player)
+	StaminaService:Clear(player)
 	PlayerStateService:OnPlayerRemoving(player)
 	AwakeningPuzzleService:OnPlayerRemoving(player)
+	DodgeService:Clear(player)
+	DebugService:Log("[PlayerRemoving]", player.Name, "saved and cleared")
 end)
 
 DebugService:Log("[ServerBootstrap] Server started, remotes ready.")
