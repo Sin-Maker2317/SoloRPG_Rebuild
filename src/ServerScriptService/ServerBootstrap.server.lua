@@ -69,10 +69,14 @@ local GetRewards = ensureRemoteFunction("GetRewards")
 local GetProgress = ensureRemoteFunction("GetProgress")
 local GetQuests = ensureRemoteFunction("GetQuests")
 local GetInventory = ensureRemoteFunction("GetInventory")
+local GetCombatStats = ensureRemoteFunction("GetCombatStats")
 local ChoosePath = ensureRemoteEvent("ChoosePath")
 local Attack = ensureRemoteEvent("Attack")
 local ClientLog = ensureRemoteEvent("ClientLog")
+	local CombatEvent = ensureRemoteEvent("CombatEvent")
+local RequestDodge = ensureRemoteEvent("RequestDodge")
 local GateMessage = ensureRemoteEvent("GateMessage")
+local AllocateStatPoint = ensureRemoteEvent("AllocateStatPoint")
 local StateChanged = ensureRemoteEvent("StateChanged")
 local SetGuildFaction = ensureRemoteEvent("SetGuildFaction")
 local CompleteTutorial = ensureRemoteEvent("CompleteTutorial")
@@ -83,13 +87,37 @@ ClientLog.OnServerEvent:Connect(function(player, msg)
 	DebugService:Log("[ClientLog]", player.Name, msg)
 end)
 
+-- Simple dodge request handling (server-side validation + cooldown)
+local dodgeCooldowns = {}
+RequestDodge.OnServerEvent:Connect(function(player)
+	local last = dodgeCooldowns[player]
+	local now = os.clock()
+	if last and now - last < 0.5 then
+		-- too fast, ignore
+		return
+	end
+	dodgeCooldowns[player] = now
+
+	-- Approve dodge by notifying client via CombatEvent
+	pcall(function()
+		CombatEvent:FireClient(player, { type = "DodgeApproved" })
+	end)
+end)
+
+AllocateStatPoint.OnServerEvent:Connect(function(player, field)
+	if type(field) ~= "string" then return end
+	local PlayerStatsService = require(script.Parent:WaitForChild("Services"):WaitForChild("PlayerStatsService"))
+	pcall(function()
+		PlayerStatsService:AllocatePoint(player, field)
+	end)
+end)
+
 -- === REMOTES LOGIC ===
 GetPlayerState.OnServerInvoke = function(player)
 	return PlayerStateService:Get(player)
 end
 
-local RewardService =
-	require(script.Parent:WaitForChild("Services"):WaitForChild("RewardService"))
+-- RewardService already required above; avoid duplicate require
 
 GetRewards.OnServerInvoke = function(player)
 	local r = RewardService:Get(player)
@@ -107,6 +135,12 @@ end
 
 GetInventory.OnServerInvoke = function(player)
 	return InventoryService:List(player)
+end
+
+GetCombatStats.OnServerInvoke = function(player)
+	local PlayerStatsService = require(script.Parent:WaitForChild("Services"):WaitForChild("PlayerStatsService"))
+	local p = PlayerStatsService:Get(player)
+	return { defense = p.def or 0, points = p.points or 0 }
 end
 
 ChoosePath.OnServerEvent:Connect(function(player, choice)
@@ -184,10 +218,10 @@ Attack.OnServerEvent:Connect(function(player)
 	local closestHumanoid = nil
 	local closestDist = 999
 
-	for _, m in ipairs(workspace:GetChildren()) do
-		if m:IsA("Model") and m.Name == "DummyEnemy" then
+	for _, m in ipairs(workspace:GetDescendants()) do
+		if m:IsA("Model") then
 			local h = m:FindFirstChildOfClass("Humanoid")
-			local rp = m:FindFirstChild("HumanoidRootPart")
+			local rp = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
 			if h and rp and h.Health > 0 then
 				local d = (rp.Position - hrp.Position).Magnitude
 				if d < closestDist then

@@ -1,0 +1,1 @@
+﻿Apply these roadmap fixes in the repo: create CombatEvent remote in ServerBootstrap, add CombatResolveService stub with CalculatePlayerDefense, broaden Attack to target any Model with a Humanoid, and set IsEnemy on spawned enemies; run the game and verify attack  HitConfirm CombatEvent reaches clients and HUD updates.

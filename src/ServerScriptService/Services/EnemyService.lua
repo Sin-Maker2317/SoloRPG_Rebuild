@@ -28,7 +28,19 @@ function EnemyService:SpawnEnemy(config, position, onDied)
 	root.Parent = model
 
 	model.PrimaryPart = root
-	model.Parent = Workspace
+
+	-- Ensure there is an Enemies folder under Workspace and parent the model there
+	local enemiesFolder = Workspace:FindFirstChild("Enemies")
+	if not enemiesFolder then
+		enemiesFolder = Instance.new("Folder")
+		enemiesFolder.Name = "Enemies"
+		enemiesFolder.Parent = Workspace
+	end
+
+	model.Parent = enemiesFolder
+
+	-- Mark model as an enemy for client lock-on detection
+	model:SetAttribute("IsEnemy", true)
 
 	humanoid.Died:Connect(function()
 		if onDied then
