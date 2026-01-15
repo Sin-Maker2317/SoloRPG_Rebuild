@@ -1,4 +1,193 @@
 -- UIRoot.client.lua
+-- Simple, robust UI state manager and layer controller
+local Players = game:GetService("Players")
+local ContextActionService = game:GetService("ContextActionService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+
+local function Log(...) print("[UIRoot]", ...) end
+
+-- load style if present
+local style = { CornerRadius = UDim.new(0,6), StrokeThickness = 1 }
+pcall(function()
+    local s = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UIStyle")
+    style = require(s)
+end)
+
+local function ensureScreenGui(parent, name, displayOrder, enabled)
+    local sg = parent:FindFirstChild(name)
+    if not sg then
+        sg = Instance.new("ScreenGui")
+        sg.Name = name
+        sg.ResetOnSpawn = false
+        sg.Parent = parent
+    end
+    pcall(function() sg.DisplayOrder = displayOrder end)
+    if enabled ~= nil then pcall(function() sg.Enabled = enabled end) end
+    sg.ResetOnSpawn = false
+    return sg
+end
+
+local function applyOverlay(screenGui)
+    if not screenGui then return end
+    local overlay = screenGui:FindFirstChild("__ModalOverlay")
+    if overlay then return overlay end
+    overlay = Instance.new("Frame")
+    overlay.Name = "__ModalOverlay"
+    overlay.Size = UDim2.new(1,0,1,0)
+    overlay.Position = UDim2.new(0,0,0,0)
+    overlay.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    overlay.BackgroundTransparency = 0.55
+    overlay.ZIndex = 1
+    overlay.Parent = screenGui
+    local corner = Instance.new("UICorner") corner.CornerRadius = style.CornerRadius corner.Parent = overlay
+    local stroke = Instance.new("UIStroke") stroke.Thickness = style.StrokeThickness stroke.Parent = overlay
+    return overlay
+end
+
+local function blockInput() return Enum.ContextActionResult.Sink end
+
+local function setGuiVisibleByName(playerGui, name, visible)
+    if not playerGui then return end
+    local obj = playerGui:FindFirstChild(name, true)
+    if not obj then return end
+    if obj:IsA("ScreenGui") then pcall(function() obj.Enabled = visible end) end
+    if obj:IsA("GuiObject") then pcall(function() obj.Visible = visible end) end
+end
+
+local function moveDescendantsIntoLayer(playerGui, sourceName, layerGui)
+    local src = playerGui:FindFirstChild(sourceName)
+    if not src then return end
+    -- if it's a ScreenGui already, move it
+    if src:IsA("ScreenGui") then
+        pcall(function() src.Parent = layerGui; src.DisplayOrder = layerGui.DisplayOrder; src.ResetOnSpawn = false end)
+        return
+    end
+    -- if it's a Folder, move any ScreenGui or GuiObject descendants
+    if src:IsA("Folder") then
+        for _, d in ipairs(src:GetDescendants()) do
+            if d:IsA("ScreenGui") or d:IsA("GuiObject") then
+                pcall(function() d.Parent = layerGui end)
+            end
+        end
+        -- watch for future additions
+        src.DescendantAdded:Connect(function(d)
+            if d:IsA("ScreenGui") or d:IsA("GuiObject") then
+                pcall(function() d.Parent = layerGui end)
+            end
+        end)
+    end
+end
+
+local function init()
+    local playerGui = player:WaitForChild("PlayerGui")
+
+    -- layers
+    local UI_HUD = ensureScreenGui(playerGui, "UI_HUD", 10, false)
+    local UI_Modals = ensureScreenGui(playerGui, "UI_Modals", 100, false)
+    local UI_Dev = ensureScreenGui(playerGui, "UI_Dev", 200, false)
+    applyOverlay(UI_Modals)
+
+    -- state values/events
+    local stateVal = playerGui:FindFirstChild("UIState")
+    if not stateVal then
+        stateVal = Instance.new("StringValue") stateVal.Name = "UIState" stateVal.Value = "CHOOSE_PATH" stateVal.Parent = playerGui
+    end
+    local stateEvent = playerGui:FindFirstChild("UIStateChanged")
+    if not stateEvent then stateEvent = Instance.new("BindableEvent") stateEvent.Name = "UIStateChanged" stateEvent.Parent = playerGui end
+    local requestEvent = playerGui:FindFirstChild("UIRequestStateChange")
+    if not requestEvent then requestEvent = Instance.new("BindableEvent") requestEvent.Name = "UIRequestStateChange" requestEvent.Parent = playerGui end
+    local devEnabled = playerGui:FindFirstChild("DevEnabled")
+    if not devEnabled then devEnabled = Instance.new("BoolValue") devEnabled.Name = "DevEnabled" devEnabled.Value = false devEnabled.Parent = playerGui end
+
+    local function setState(newState)
+        if not newState then return end
+        if stateVal.Value == newState then return end
+        stateVal.Value = newState
+        pcall(function() stateEvent:Fire(newState) end)
+        Log("State ->", newState)
+
+        -- hide everything in hard list first
+        local hardHide = { "DevTestPanel", "DevUILoader", "DebugUI", "QuestHUD", "SkillBar", "StatsPanel", "InventoryView", "EquipmentPanel", "TerminalInteract", "TargetFrame", "HUD", "SystemAwakening" }
+        for _, n in ipairs(hardHide) do setGuiVisibleByName(playerGui, n, false) end
+
+        -- default layers off
+        UI_Modals.Enabled = false UI_HUD.Enabled = false UI_Dev.Enabled = false devEnabled.Value = false
+
+        if newState == "CHOOSE_PATH" then
+            setGuiVisibleByName(playerGui, "HospitalChoice", true)
+            setGuiVisibleByName(playerGui, "GuildChoice", true)
+            UI_Modals.Enabled = true
+        elseif newState == "GUILD_PICK" then
+            setGuiVisibleByName(playerGui, "GuildChoice", true)
+            UI_Modals.Enabled = true
+        elseif newState == "TUTORIAL_MOVEMENT" then
+            setGuiVisibleByName(playerGui, "SystemAwakening", true)
+            -- minimal HUD optional: keep HUD disabled
+        elseif newState == "TUTORIAL_COMBAT" then
+            setGuiVisibleByName(playerGui, "SystemAwakening", true)
+            setGuiVisibleByName(playerGui, "SkillBar", true)
+        elseif newState == "CITY" then
+            UI_HUD.Enabled = true
+            local enableList = { "HUD", "QuestHUD", "SkillBar", "TargetFrame", "StatsPanel", "InventoryView", "EquipmentPanel", "TerminalInteract", "SystemMessages", "EnemyUI" }
+            for _, n in ipairs(enableList) do setGuiVisibleByName(playerGui, n, true) end
+        end
+    end
+
+    requestEvent.Event:Connect(function(req)
+        setState(req)
+    end)
+
+    -- Move known StarterGui folders into layers
+    local MODALS = { "HospitalChoice", "GuildChoice", "SystemAwakening" }
+    local HUDS = { "HUD", "QuestHUD", "SkillBar", "StatsPanel", "InventoryView", "EquipmentPanel", "TerminalInteract", "TargetFrame", "LockOn", "CombatFeel", "SystemMessages", "EnemyUI", "SfxHooks" }
+    local DEVS = { "DebugUI", "DevTestPanel", "DevUILoader" }
+
+    for _, n in ipairs(MODALS) do moveDescendantsIntoLayer(playerGui, n, UI_Modals) end
+    for _, n in ipairs(HUDS) do moveDescendantsIntoLayer(playerGui, n, UI_HUD) end
+    for _, n in ipairs(DEVS) do moveDescendantsIntoLayer(playerGui, n, UI_Dev) end
+
+    -- monitor modal ScreenGuis to enforce overlay and input block
+    UI_Modals.DescendantAdded:Connect(function(d)
+        if d:IsA("ScreenGui") then
+            d:GetPropertyChangedSignal("Enabled"):Connect(function()
+                if d.Enabled then
+                    UI_Modals.Enabled = true UI_HUD.Enabled = false
+                    ContextActionService:BindAction("ModalBlock", function() return Enum.ContextActionResult.Sink end, false, Enum.UserInputType.MouseButton1, Enum.UserInputType.MouseButton2, Enum.UserInputType.Touch, Enum.KeyCode.Escape)
+                    Log("Modal ON:", d.Name)
+                else
+                    UI_Modals.Enabled = false UI_HUD.Enabled = true
+                    ContextActionService:UnbindAction("ModalBlock")
+                    Log("Modal OFF:", d.Name)
+                end
+            end)
+        end
+    end)
+
+    -- Dev toggle (F8) with allowlist
+    local allowedDevs = { Azathiell = true, Marietto_Crg = true }
+    UserInputService.InputBegan:Connect(function(input, gp)
+        if gp then return end
+        if input.KeyCode == Enum.KeyCode.F8 then
+            local can = RunService:IsStudio() or allowedDevs[player.Name]
+            if not can then Log("Dev toggle blocked for user", player.Name); return end
+            UI_Dev.Enabled = not UI_Dev.Enabled
+            devEnabled.Value = UI_Dev.Enabled
+            Log("DevToggle ->", UI_Dev.Enabled and "ON" or "OFF")
+        end
+    end)
+
+    -- initialize
+    setState("CHOOSE_PATH")
+    Log("Layers ready")
+end
+
+local ok, err = pcall(init)
+if not ok then warn("[UIRoot] init failed:", err) end
+-- UIRoot.client.lua
 -- Central UI layer controller: creates UI_HUD, UI_Modals, UI_Dev and applies visibility policies
 local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
