@@ -76,6 +76,7 @@ local NotificationService =
 
 local CacheService =
 	require(script.Parent:WaitForChild("Services"):WaitForChild("CacheService"))
+local RemoteGuardService = require(script.Parent:WaitForChild("Services"):WaitForChild("RemoteGuardService"))
 
 DebugService:Log("[ServerBootstrap] STARTING...")
 
@@ -136,22 +137,8 @@ ClientLog.OnServerEvent:Connect(function(player, msg)
 	DebugService:Log("[ClientLog]", player.Name, msg)
 end)
 
--- Simple dodge request handling (server-side validation + cooldown)
+-- dodgeCooldowns managed by improved RequestDodge handler below; simple early handler removed to avoid duplicate listeners
 local dodgeCooldowns = {}
-RequestDodge.OnServerEvent:Connect(function(player)
-	local last = dodgeCooldowns[player]
-	local now = os.clock()
-	if last and now - last < 0.5 then
-		-- too fast, ignore
-		return
-	end
-	dodgeCooldowns[player] = now
-
-	-- Approve dodge by notifying client via CombatEvent
-	pcall(function()
-		CombatEvent:FireClient(player, { type = "DodgeApproved" })
-	end)
-end)
 
 -- === REMOTES LOGIC ===
 GetPlayerState.OnServerInvoke = function(player)
@@ -196,7 +183,13 @@ end
 -- IMPROVED: RequestDodge with server-side validation
 RequestDodge.OnServerEvent:Connect(function(player)
 	if not player or not player.Parent then return end
-	
+
+	local okGuard, guardReason = RemoteGuardService:CanInvoke(player, "RequestDodge")
+	if not okGuard then
+		CombatEvent:FireClient(player, { type = "DodgeFailed", reason = guardReason or "RateLimited" })
+		return
+	end
+
 	local stamina = StaminaService:Get(player)
 	if not DodgeService:CanDodge(player, stamina) then
 		CombatEvent:FireClient(player, { type = "DodgeFailed", reason = "No stamina or on cooldown" })
@@ -331,6 +324,12 @@ end
 local UseSkill = ensureRemoteEvent("UseSkill")
 UseSkill.OnServerEvent:Connect(function(player, skillId)
 	if not player or not player.Parent or type(skillId) ~= "string" then return end
+
+	local okGuard, guardReason = RemoteGuardService:CanInvoke(player, "UseSkill")
+	if not okGuard then
+		CombatEvent:FireClient(player, { type = "SkillFailed", reason = guardReason or "RateLimited" })
+		return
+	end
 	
 	-- Check stamina and cooldown
 	local ok, skillDef = SkillService:UseSkill(player, skillId)
@@ -456,6 +455,12 @@ ClaimQuest.OnServerEvent:Connect(function(player, questId)
 end)
 
 Attack.OnServerEvent:Connect(function(player)
+	local okGuard, guardReason = RemoteGuardService:CanInvoke(player, "Attack")
+	if not okGuard then
+		CombatEvent:FireClient(player, { type = "HitFailed", reason = guardReason or "RateLimited" })
+		return
+	end
+
 	DebugService:Log("[Attack] received from", player.Name)
 
 	local character = player.Character
