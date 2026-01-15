@@ -1,0 +1,39 @@
+{
+    "remotes":  [
+                    "GetPlayerState",
+                    "GetRewards",
+                    "GetProgress",
+                    "GetQuests",
+                    "GetInventory",
+                    "GetStatsSnapshot",
+                    "GetCombatStats",
+                    "GetEquipmentSnapshot",
+                    "GetAvailableGates",
+                    "GetGuildSnapshot",
+                    "GetReputationSnapshot",
+                    "GetStorySnapshot",
+                    "ChoosePath",
+                    "Attack",
+                    "ClientLog",
+                    "GateMessage",
+                    "StateChanged",
+                    "SetGuildFaction",
+                    "CompleteTutorial",
+                    "UseTerminal",
+                    "ClaimQuest",
+                    "CombatEvent",
+                    "RequestDodge",
+                    "AllocateStatPoint",
+                    "UseSkill",
+                    "EquipItem",
+                    "EnterGate",
+                    "ReserveGate",
+                    "BuyGuildItem",
+                    "SpawnGuildHelper",
+                    "AdvanceStory"
+                ],
+    "workspace":  {
+                      "enemies":  true
+                  },
+    "generated":  "15/01/2026 10:58:38"
+}

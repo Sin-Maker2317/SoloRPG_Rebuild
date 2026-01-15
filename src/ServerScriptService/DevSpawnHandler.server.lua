@@ -103,7 +103,8 @@ local function onPlayerAdded(player)
                     if mob then
                         local mobHum = mob:FindFirstChildOfClass("Humanoid")
                         if mobHum then
-                            mobHum.Health = mobConfig.maxHealth
+                            -- Ensure mob spawns at full health; avoid using mobConfig here (scoped in callback)
+                            pcall(function() mobHum.Health = mobHum.MaxHealth end)
                         end
                     end
                 end
@@ -112,19 +113,15 @@ local function onPlayerAdded(player)
     end)
 end
 
-Players.PlayerAdded:Connect(onPlayerAdded)
-                EnemyService.SpawnDummyEnemy(dummyPos)
-            end)
-        end
-    end)
-end
+-- Initialize dev environment
+-- Note: PlayerAdded connect is handled in the init block below.
 
 -- Initialize dev environment
 if DEV_MODE then
     createDevPlatform()
-    
+
     Players.PlayerAdded:Connect(onPlayerAdded)
-    
+
     -- Handle players already in game
     for _, player in ipairs(Players:GetPlayers()) do
         onPlayerAdded(player)

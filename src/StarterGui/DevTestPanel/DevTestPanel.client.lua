@@ -7,6 +7,17 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
+
+-- Restrict DevTestPanel to known developer accounts only (temporary)
+local ALLOWED_DEVS = {
+    ["Azathiell"] = true,
+    ["Marietto_Crg"] = true,
+}
+
+if not player or not ALLOWED_DEVS[player.Name] then
+    -- Do not load dev UI for non-dev players
+    return
+end
 local remotes = ReplicatedStorage:FindFirstChild("Remotes")
 
 local devRemote, useSkill, getStats
@@ -53,21 +64,21 @@ pcall(function() print("DevTestPanel loaded. parentGui=", tostring(parentGui)) e
 
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0,220,0,180)
+frame.Size = UDim2.new(0,260,0,300)
 frame.AnchorPoint = Vector2.new(1,0)
 frame.Position = UDim2.new(1, -10, 0, 8)
-frame.BackgroundTransparency = 0.2
-frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+frame.BackgroundTransparency = 0.15
+frame.BackgroundColor3 = Color3.fromRGB(18,18,20)
 frame.BorderSizePixel = 0
 frame.Parent = screenGui
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1,0,0,28)
+title.Size = UDim2.new(1,0,0,32)
 title.BackgroundTransparency = 1
 title.Text = "Dev Test Panel"
-title.TextColor3 = Color3.fromRGB(255,255,255)
-title.Font = Enum.Font.SourceSansBold
-title.TextSize = 16
+title.TextColor3 = Color3.fromRGB(220,220,220)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
 title.Parent = frame
 
 local y = 34
@@ -132,12 +143,14 @@ end
 
 local shiftLock = false
 local shiftBtn = Instance.new("TextButton")
-shiftBtn.Size = UDim2.new(0.4, -6, 0, 28)
-shiftBtn.Position = UDim2.new(0.05, 0, 1, -40)
+shiftBtn.Size = UDim2.new(0.44, -6, 0, 32)
+shiftBtn.Position = UDim2.new(0.04, 0, 1, -48)
 shiftBtn.Text = "ShiftLock: Off"
-shiftBtn.Font = Enum.Font.SourceSans
-shiftBtn.TextSize = 14
-shiftBtn.BackgroundColor3 = Color3.fromRGB(80,80,80)
+shiftBtn.Font = Enum.Font.Gotham
+shiftBtn.TextSize = 15
+shiftBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+shiftBtn.TextColor3 = Color3.fromRGB(240,240,240)
+shiftBtn.BorderSizePixel = 0
 shiftBtn.Parent = frame
 -- (initial simple toggle removed; full behavior implemented below)
 
@@ -200,14 +213,14 @@ end)
 
 -- Stats label
 local statsLabel = Instance.new("TextLabel")
-statsLabel.Size = UDim2.new(0.5, -10, 0, 36)
-statsLabel.Position = UDim2.new(0.5, 6, 1, -40)
+statsLabel.Size = UDim2.new(0.92, 0, 0, 40)
+statsLabel.Position = UDim2.new(0.04, 0, 0, 64)
 statsLabel.BackgroundTransparency = 0
-statsLabel.BackgroundColor3 = Color3.fromRGB(20,20,20)
+statsLabel.BackgroundColor3 = Color3.fromRGB(14,14,14)
 statsLabel.TextColor3 = Color3.fromRGB(220,220,220)
 statsLabel.Text = "Stats: (click)"
 statsLabel.TextWrapped = true
-statsLabel.Font = Enum.Font.SourceSans
+statsLabel.Font = Enum.Font.Gotham
 statsLabel.TextSize = 14
 statsLabel.Parent = frame
 statsLabel.InputBegan:Connect(function(input)
@@ -237,6 +250,94 @@ local function triggerSkill(id)
     end
     -- visual feedback: briefly flash overlay
     for _, r in ipairs(rows) do
+
+    -- Dev tools quick actions (Spawn, Teleport, ToggleAI, Damage/Heal, SmokeReport)
+    local devActionsY = 140
+    local function mkButton(text, posY, width)
+        width = width or 0.46
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(width, -6, 0, 32)
+        b.Position = UDim2.new(0.02, 0, 0, posY)
+        b.Text = text
+        b.Font = Enum.Font.Gotham
+        b.TextSize = 15
+        b.BackgroundColor3 = Color3.fromRGB(65,65,65)
+        b.TextColor3 = Color3.fromRGB(245,245,245)
+        b.BorderSizePixel = 0
+        b.Parent = frame
+        return b
+    end
+
+    local spawnBtn = mkButton("Spawn NPC", 120)
+    local teleportBtn = mkButton("Teleport To NPC", 160)
+    local toggleAIBtn = mkButton("Toggle AI", 200)
+    local dmgBtn = mkButton("Damage 10", 240, 0.22)
+    local healBtn = mkButton("Heal 10", 240, 0.22)
+
+    -- place heal to the right
+    healBtn.Position = UDim2.new(0.5, 6, 0, 236)
+
+    local smokeLabel = Instance.new("TextLabel")
+    smokeLabel.Size = UDim2.new(0.96, 0, 0, 56)
+    smokeLabel.Position = UDim2.new(0.02, 0, 0, 64)
+    smokeLabel.BackgroundTransparency = 0
+    smokeLabel.BackgroundColor3 = Color3.fromRGB(10,10,10)
+    smokeLabel.TextColor3 = Color3.fromRGB(200,200,200)
+    smokeLabel.Text = "SmokeReport: (refresh)"
+    smokeLabel.TextWrapped = true
+    smokeLabel.RichText = true
+    smokeLabel.Font = Enum.Font.Gotham
+    smokeLabel.TextSize = 12
+    smokeLabel.Parent = frame
+
+    local function refreshSmoke()
+        local sv = ReplicatedStorage:FindFirstChild("SmokeReport")
+        if sv and sv:IsA("StringValue") then
+            smokeLabel.Text = "SmokeReport: " .. (sv.Value or "(empty)")
+        else
+            smokeLabel.Text = "SmokeReport: (not present)"
+        end
+    end
+
+    spawnBtn.MouseButton1Click:Connect(function()
+        if devRemote and devRemote:IsA("RemoteEvent") then
+            pcall(function() devRemote:FireServer("SpawnNPC") end)
+        end
+    end)
+
+    teleportBtn.MouseButton1Click:Connect(function()
+        if devRemote and devRemote:IsA("RemoteEvent") then
+            pcall(function() devRemote:FireServer("TeleportToNPC") end)
+        end
+    end)
+
+    toggleAIBtn.MouseButton1Click:Connect(function()
+        if devRemote and devRemote:IsA("RemoteEvent") then
+            pcall(function() devRemote:FireServer("ToggleAI") end)
+        end
+    end)
+
+    dmgBtn.MouseButton1Click:Connect(function()
+        if devRemote and devRemote:IsA("RemoteEvent") then
+            pcall(function() devRemote:FireServer("DamageSelf", 10) end)
+        end
+    end)
+
+    healBtn.MouseButton1Click:Connect(function()
+        if devRemote and devRemote:IsA("RemoteEvent") then
+            pcall(function() devRemote:FireServer("HealSelf", 10) end)
+        end
+    end)
+
+    -- allow clicking the smoke label to refresh
+    smokeLabel.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            refreshSmoke()
+        end
+    end)
+
+    -- Attempt initial refresh
+    task.spawn(function() wait(1) refreshSmoke() end)
         local sid = r.skillBox.Text ~= "" and r.skillBox.Text or r.skillBox.PlaceholderText
         if sid == id then
             r.overlay.Visible = true

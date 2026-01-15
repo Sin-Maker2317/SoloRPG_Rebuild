@@ -1,0 +1,13 @@
+# Roblox Studio temp
+*.rbxl.lock
+*.rbxl.session.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rojo cache
+.rojo/
+
+# Logs
+*.log

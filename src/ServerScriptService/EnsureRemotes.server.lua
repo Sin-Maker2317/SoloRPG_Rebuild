@@ -32,15 +32,65 @@ local function ensureRemote(name, kind)
     end
 end
 
--- Names observed in client scripts / Net.lua that were not created previously
-local ensureList = {
-    { name = "GetStatsSnapshot", kind = "Function" },
-    { name = "GetEquipmentSnapshot", kind = "Function" },
-    { name = "UseSkill", kind = "Event" },
-}
+-- Try to read canonical remote list from Shared/Net.lua when available
+local ok, Net = pcall(function()
+    local shared = ReplicatedStorage:FindFirstChild("Shared")
+    if not shared then return nil end
+    local netMod = shared:FindFirstChild("Net")
+    if not netMod then return nil end
+    return require(netMod)
+end)
 
-for _, info in ipairs(ensureList) do
-    ensureRemote(info.name, info.kind)
+if ok and Net then
+    for k, v in pairs(Net) do
+        -- heuristics: names starting with 'Get' are RemoteFunctions; others RemoteEvents
+        local kind = "Event"
+        if tostring(k):match("^Get") or tostring(k):match("Snapshot") then
+            kind = "Function"
+        end
+        ensureRemote(v, kind)
+    end
+else
+    -- fallback: ensure full canonical set from Net.lua (hardcoded) to avoid client yields
+    local ensureList = {
+        { name = "GetPlayerState", kind = "Function" },
+        { name = "GetRewards", kind = "Function" },
+        { name = "GetProgress", kind = "Function" },
+        { name = "GetQuests", kind = "Function" },
+        { name = "GetInventory", kind = "Function" },
+        { name = "GetStatsSnapshot", kind = "Function" },
+        { name = "GetCombatStats", kind = "Function" },
+        { name = "GetEquipmentSnapshot", kind = "Function" },
+        { name = "GetAvailableGates", kind = "Function" },
+        { name = "GetStamina", kind = "Function" },
+        { name = "QuestUpdate", kind = "Event" },
+        { name = "GetGuildSnapshot", kind = "Function" },
+        { name = "GetReputationSnapshot", kind = "Function" },
+        { name = "GetStorySnapshot", kind = "Function" },
+
+        { name = "ChoosePath", kind = "Event" },
+        { name = "Attack", kind = "Event" },
+        { name = "ClientLog", kind = "Event" },
+        { name = "GateMessage", kind = "Event" },
+        { name = "StateChanged", kind = "Event" },
+        { name = "SetGuildFaction", kind = "Event" },
+        { name = "CompleteTutorial", kind = "Event" },
+        { name = "UseTerminal", kind = "Event" },
+        { name = "ClaimQuest", kind = "Event" },
+        { name = "CombatEvent", kind = "Event" },
+        { name = "RequestDodge", kind = "Event" },
+        { name = "AllocateStatPoint", kind = "Event" },
+        { name = "UseSkill", kind = "Event" },
+        { name = "EquipItem", kind = "Event" },
+        { name = "EnterGate", kind = "Event" },
+        { name = "ReserveGate", kind = "Event" },
+        { name = "BuyGuildItem", kind = "Event" },
+        { name = "SpawnGuildHelper", kind = "Event" },
+        { name = "AdvanceStory", kind = "Event" },
+    }
+    for _, info in ipairs(ensureList) do
+        ensureRemote(info.name, info.kind)
+    end
 end
 
 -- wire GetStatsSnapshot to StatsService if available

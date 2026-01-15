@@ -48,7 +48,14 @@ function RemoteGuardService:CanInvoke(player, eventName)
     local min = MIN_INTERVALS[eventName] or DEFAULT_INTERVAL
     local last = per[eventName]
     if last and now - last < min then
-        log(player.Name, "rate-limited for", eventName, string.format("(%.2fs < %.2fs)", now - last, min))
+        -- Throttle logging to avoid spamming output for aggressive clients
+        local logKey = "_lastLog_" .. tostring(eventName)
+        local lastLog = per[logKey] or 0
+        local LOG_THROTTLE = 1.0
+        if now - lastLog > LOG_THROTTLE then
+            log(player.Name, "rate-limited for", eventName, string.format("(%.2fs < %.2fs)", now - last, min))
+            per[logKey] = now
+        end
         return false, "RateLimited"
     end
 
