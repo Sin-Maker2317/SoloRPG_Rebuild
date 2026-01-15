@@ -390,33 +390,7 @@ UseSkill.OnServerEvent:Connect(function(player, skillId)
 	DebugService:Log("[UseSkill]", player.Name, "used", skillId, "| Stamina remaining:", StaminaService:Get(player))
 end)
 
--- IMPROVED: Attack remote - server-side validation with proper damage
-Attack.OnServerEvent:Connect(function(player)
-	if not player or not player.Parent then return end
-	
-	local character = player.Character
-	if not character then return end
-	
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return end
-	
-	local nearest = findNearestEnemy(hrp, 40)
-	if not nearest then return end
-	
-	local humanoid = nearest:FindFirstChildOfClass("Humanoid")
-	if not humanoid or humanoid.Health <= 0 then return end
-	
-	-- Calculate damage with proper scaling
-	local stats = CharacterStats:GetSnapshot(player)
-	local damage = CombatService:CalculatePlayerDamage(stats, CombatService.BASE_DAMAGE)
-	
-	-- Apply damage
-	humanoid:TakeDamage(damage)
-	
-	-- Notify client of hit
-	CombatEvent:FireClient(player, { type = "HitConfirm", damage = damage, targetName = nearest.Name })
-	DebugService:Log("[Attack]", player.Name, "hit", nearest.Name, "for", damage, "damage")
-end)
+-- Attack handling consolidated later in this file (keeps single authoritative handler)
 
 GetCombatStats.OnServerInvoke = function(player)
 	local PlayerStatsService = require(script.Parent:WaitForChild("Services"):WaitForChild("PlayerStatsService"))
