@@ -58,9 +58,33 @@ else
     parentGui = player and player:FindFirstChild("PlayerGui") or script.Parent
 end
 screenGui.Parent = parentGui
+screenGui.Enabled = false
 
 -- debug print
 pcall(function() print("DevTestPanel loaded. parentGui=", tostring(parentGui)) end)
+
+-- Visibility gating: only visible when DevEnabled and allowed state
+local function updateVisibility()
+    local devVal = parentGui:FindFirstChild("DevEnabled")
+    local stateVal = parentGui:FindFirstChild("UIState")
+    local devOn = devVal and devVal.Value
+    local state = stateVal and stateVal.Value
+    if devOn and state and state ~= "CHOOSE_PATH" and state ~= "GUILD_PICK" then
+        screenGui.Enabled = true
+    else
+        screenGui.Enabled = false
+    end
+end
+
+-- Bind to changes
+if parentGui then
+    local devVal = parentGui:FindFirstChild("DevEnabled")
+    if devVal then devVal.Changed:Connect(updateVisibility) end
+    local stateEvent = parentGui:FindFirstChild("UIStateChanged")
+    if stateEvent then stateEvent.Event:Connect(updateVisibility) end
+    -- initial
+    task.spawn(updateVisibility)
+end
 
 
 local frame = Instance.new("Frame")

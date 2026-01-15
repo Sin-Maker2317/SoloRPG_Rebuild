@@ -45,21 +45,31 @@ local function buildGui()
 end
 
 local gui = buildGui()
-gui.Parent = player:WaitForChild("PlayerGui")
+local playerGui = player:WaitForChild("PlayerGui")
+gui.Parent = playerGui
 gui.Enabled = false
 
-local function setVisible(state)
-	gui.Enabled = (state == "AwakeningDungeon")
+local function setVisibleForState(uistate)
+	-- Only show as tutorial overlay during movement/combat tutorial states
+	if uistate == "TUTORIAL_MOVEMENT" or uistate == "TUTORIAL_COMBAT" then
+		gui.Enabled = true
+	else
+		gui.Enabled = false
+	end
 end
 
-local ok, state = pcall(function()
-	return GetPlayerState:InvokeServer()
+-- react to server state changes if needed (keep compatibility)
+StateChanged.OnClientEvent:Connect(function(s)
+	-- no-op: server-driven states not used for UI gating here
 end)
-if ok then
-	setVisible(state)
+
+-- react to UI state changes
+local se = playerGui:FindFirstChild("UIStateChanged")
+if se then
+	se.Event:Connect(function(ns) setVisibleForState(ns) end)
 end
 
-StateChanged.OnClientEvent:Connect(function(state)
-	setVisible(state)
-end)
+-- initial read
+local sv = playerGui:FindFirstChild("UIState")
+if sv then setVisibleForState(sv.Value) end
 

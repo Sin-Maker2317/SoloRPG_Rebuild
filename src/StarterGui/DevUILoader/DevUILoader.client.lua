@@ -7,7 +7,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 
 -- DEV MODE FLAG - set to false to disable dev UI
-local DEV_MODE = true
+-- DEV MODE FLAG - default to false to prevent auto-showing dev UI
+local DEV_MODE = false
 
 if not DEV_MODE then
     return

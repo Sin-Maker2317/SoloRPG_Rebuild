@@ -11,6 +11,9 @@ local gui = Instance.new("ScreenGui")
 gui.Name = "SkillBar"
 gui.ResetOnSpawn = false
 gui.Parent = player:WaitForChild("PlayerGui")
+local playerGui = player:WaitForChild("PlayerGui")
+gui.Parent = playerGui
+gui.Enabled = false
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.fromScale(0.3, 0.08)
@@ -63,3 +66,17 @@ CombatEvent.OnClientEvent:Connect(function(payload)
 		-- TODO: Error feedback
 	end
 end)
+
+-- Toggle visibility based on UIState
+local se = playerGui:FindFirstChild("UIStateChanged")
+if se then
+	se.Event:Connect(function(ns)
+		if ns == "TUTORIAL_COMBAT" or ns == "CITY" then
+			gui.Enabled = true
+		else
+			gui.Enabled = false
+		end
+	end)
+end
+local sv = playerGui:FindFirstChild("UIState")
+if sv and (sv.Value == "TUTORIAL_COMBAT" or sv.Value == "CITY") then gui.Enabled = true end

@@ -12,7 +12,9 @@ local GateMessage = remotes:WaitForChild("GateMessage")
 local gui = Instance.new("ScreenGui")
 gui.Name = "QuestHUD"
 gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
+local playerGui = player:WaitForChild("PlayerGui")
+gui.Parent = playerGui
+gui.Enabled = false
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.fromScale(0.28, 0.18)
@@ -61,7 +63,22 @@ local function refresh()
 	l2.Text = ("Kill Enemies: %d/%d %s"):format(data.kills or 0, data.goalKills or 10, (data.claimedKills and "[CLAIMED]") or "")
 end
 
-refresh()
+-- react to UI state changes
+local se = playerGui:FindFirstChild("UIStateChanged")
+if se then
+	se.Event:Connect(function(ns)
+		if ns == "CITY" then
+			gui.Enabled = true
+			task.delay(0.1, refresh)
+		else
+			gui.Enabled = false
+		end
+	end)
+end
+
+-- initial
+local sv = playerGui:FindFirstChild("UIState")
+if sv and sv.Value == "CITY" then gui.Enabled = true; task.delay(0.1, refresh) end
 GateMessage.OnClientEvent:Connect(function()
 	task.delay(0.1, refresh)
 end)

@@ -9,7 +9,10 @@ local GateMessage = Remotes:WaitForChild("GateMessage")
 local gui = Instance.new("ScreenGui")
 gui.Name = "HUD"
 gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
+local playerGui = player:WaitForChild("PlayerGui")
+gui.Parent = playerGui
+-- start hidden until CITY state
+gui.Enabled = false
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.fromScale(0.22, 0.12)
@@ -49,4 +52,19 @@ GateMessage.OnClientEvent:Connect(function()
 	-- After gate clear, refresh HUD
 	task.delay(0.1, refresh)
 end)
+
+-- Show HUD only in CITY
+local se = playerGui:FindFirstChild("UIStateChanged")
+if se then
+	se.Event:Connect(function(ns)
+		if ns == "CITY" then
+			gui.Enabled = true
+			task.delay(0.1, refresh)
+		else
+			gui.Enabled = false
+		end
+	end)
+end
+local sv = playerGui:FindFirstChild("UIState")
+if sv and sv.Value == "CITY" then gui.Enabled = true; task.delay(0.1, refresh) end
 
