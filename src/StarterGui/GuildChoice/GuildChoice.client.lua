@@ -50,7 +50,7 @@ local function build()
 end
 
 local gui = build()
-gui.Parent = player:WaitForChild("PlayerGui")
+gui.Parent = script.Parent
 gui.Enabled = false
 
 local function shouldShow()

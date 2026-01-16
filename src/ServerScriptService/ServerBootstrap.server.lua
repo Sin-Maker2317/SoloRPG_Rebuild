@@ -61,6 +61,8 @@ local AbilityService =
 
 local WorldGatesService =
 	require(script.Parent:WaitForChild("Services"):WaitForChild("WorldGatesService"))
+local MobService = require(script.Parent:WaitForChild("Services"):WaitForChild("MobService"))
+local RespawnService = require(script.Parent:WaitForChild("Services"):WaitForChild("RespawnService"))
 
 local ArenaService =
 	require(script.Parent:WaitForChild("Services"):WaitForChild("ArenaService"))
@@ -82,6 +84,7 @@ DebugService:Log("[ServerBootstrap] STARTING...")
 
 WorldService:Init()
 AwakeningDeathService:Init()
+RespawnService:Init()
 
 -- === REMOTES SETUP ===
 local RemotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
@@ -271,6 +274,79 @@ StartGate.OnServerEvent:Connect(function(player, gateId)
 	else
 		CombatEvent:FireClient(player, { type = "GateFailed", reason = "Cannot start gate" })
 	end
+end)
+
+-- Minimal EnterGate flow for Test Phase: spawn 2 simple mobs, reward, teleport back
+local EnterGate = ensureRemoteEvent("EnterGate")
+local playerGateSessions = {}
+
+local function teleportPlayerToCFrame(player, cframe)
+	if not player or not player.Parent or not cframe then return end
+	local char = player.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		hrp.CFrame = cframe + Vector3.new(0,3,0)
+	end
+end
+
+EnterGate.OnServerEvent:Connect(function(player, gateId)
+	if not player or not player.Parent then return end
+	if playerGateSessions[player] then
+		CombatEvent:FireClient(player, { type = "GateFailed", reason = "AlreadyInGate" })
+		return
+	end
+
+	-- validate gate
+	gateId = gateId or "Gate1"
+	local gateDef = WorldGatesService.Gates[gateId] or WorldGatesService.Gates.Gate1
+
+	-- teleport player to gate spawn
+	local spawnCF = WorldService:GetSpawnCFrame("Spawn_SoloGate") or WorldService:GetSpawnCFrame("Spawn_Town")
+	teleportPlayerToCFrame(player, spawnCF)
+
+	-- create session
+	local session = { player = player, enemies = {}, remaining = 2, gateId = gateId }
+	playerGateSessions[player] = session
+
+	-- safety: on player death inside gate, teleport back and cleanup
+	local function onDied()
+		-- use central respawn to handle gate deaths
+		RespawnService:RespawnPlayer(player, "GateDeath")
+		playerGateSessions[player] = nil
+	end
+	if player.Character then
+		local hum = player.Character:FindFirstChildOfClass("Humanoid")
+		if hum then hum.Died:Connect(onDied) end
+	end
+
+	-- spawn two simple mobs in front of player
+	for i = 1, 2 do
+		local pos = spawnCF.Position + Vector3.new((i-1)*4 - 2, 0, -8)
+		MobService:SpawnRandom(pos, function(mobKey, cfg, model)
+			-- on mob death
+			if not player or not player.Parent then return end
+			-- simple session reward per mob
+			local xp = (gateDef and gateDef.reward_xp and math.floor(gateDef.reward_xp / 2)) or 100
+			local coins = (gateDef and gateDef.reward_coins and math.floor(gateDef.reward_coins / 2)) or 50
+			RewardService:Add(player, xp, coins)
+			GateMessage:FireClient(player, "Enemy defeated: +" .. tostring(xp) .. " XP +" .. tostring(coins) .. " COINS")
+
+			session.remaining = session.remaining - 1
+			if session.remaining <= 0 then
+				-- gate cleared
+				GateMessage:FireClient(player, "Gate Cleared")
+				DebugService:Log("[EnterGate] Player", player.Name, "cleared gate", gateId)
+				-- teleport back to town
+				local townCF = WorldService:GetSpawnCFrame("Spawn_Town")
+				teleportPlayerToCFrame(player, townCF)
+				playerGateSessions[player] = nil
+			end
+		end)
+	end
+
+	CombatEvent:FireClient(player, { type = "GateStarted", gateId = gateId, gateName = gateDef.name })
+	DebugService:Log("[EnterGate] Player", player.Name, "entered test gate", gateId)
 end)
 
 -- NEW: CreateMatch remote handler for PvP arenas
@@ -475,30 +551,29 @@ Attack.OnServerEvent:Connect(function(player)
 		return
 	end
 
-	local closestHumanoid = nil
-	local closestDist = 999
-
-	for _, m in ipairs(workspace:GetDescendants()) do
-		if m:IsA("Model") then
-			local h = m:FindFirstChildOfClass("Humanoid")
-			local rp = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
-			if h and rp and h.Health > 0 then
-				local d = (rp.Position - hrp.Position).Magnitude
-				if d < closestDist then
-					closestDist = d
-					closestHumanoid = h
-				end
-			end
-		end
+	-- find nearest enemy within melee range (6 studs)
+	local target = findNearestEnemy(hrp, 6)
+	if not target then
+		DebugService:Log("[Attack] no enemy in melee range")
+		CombatEvent:FireClient(player, { type = "HitFailed", reason = "NoTarget" })
+		return
 	end
 
-	DebugService:Log("[Attack] closestDist:", closestDist, "found:", closestHumanoid ~= nil)
+	local targetHum = target:FindFirstChildOfClass("Humanoid")
+	if not targetHum or targetHum.Health <= 0 then
+		DebugService:Log("[Attack] invalid target")
+		CombatEvent:FireClient(player, { type = "HitFailed", reason = "InvalidTarget" })
+		return
+	end
 
-	if closestHumanoid and closestDist <= 30 then
-		CombatService:DealDamage(closestHumanoid)
-		DebugService:Log("[Attack] damage applied, target HP now:", closestHumanoid.Health)
+	-- Deal damage via CombatService with dealerPlayer for correct dodge/scale handling
+	local damage = CombatService:DealDamage(targetHum, player)
+	if damage and type(damage) == "number" and damage > 0 then
+		CombatEvent:FireClient(player, { type = "HitConfirm", damage = damage, target = target.Name })
+		DebugService:Log("[Attack] damage applied", damage, "to", target.Name, "HP now:", targetHum.Health)
 	else
-		DebugService:Log("[Attack] no target in range")
+		CombatEvent:FireClient(player, { type = "HitFailed", reason = "DodgedOrBlocked" })
+		DebugService:Log("[Attack] damage not applied (dodged/blocked)")
 	end
 end)
 

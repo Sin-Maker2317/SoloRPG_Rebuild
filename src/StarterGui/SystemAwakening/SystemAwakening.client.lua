@@ -10,6 +10,8 @@ local function buildGui()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "SystemAwakening"
 	gui.ResetOnSpawn = false
+	gui.Parent = script.Parent
+	gui.Enabled = false
 
 	local frame = Instance.new("Frame")
 	frame.Size = UDim2.fromScale(0.6, 0.25)

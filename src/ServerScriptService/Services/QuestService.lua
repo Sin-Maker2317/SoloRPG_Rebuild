@@ -20,23 +20,55 @@ end
 
 local playerQuests = {}
 
+local function normalizeQuest(q)
+	local out = {}
+	out.id = q.id or q.name or q.title or "unnamed"
+	out.title = q.title or q.name or q.id or "Quest"
+	out.description = q.description or (q.objectives and table.concat(q.objectives, "; ")) or q.title or ""
+	out.progress = q.progress or 0
+	out.completed = q.completed or false
+	out.objectives = q.objectives or {}
+	return out
+end
+
 function QuestService:CreatePlayer(player)
 	playerQuests[player] = { active = {}, completed = {} }
 end
 
+-- AddQuest: ensure only one active quest at a time for tutorial flows.
 function QuestService:AddQuest(player, quest)
 	if not playerQuests[player] then self:CreatePlayer(player) end
-	table.insert(playerQuests[player].active, quest)
+	local q = normalizeQuest(quest)
+	-- enforce single active quest: replace existing active list
+	playerQuests[player].active = { q }
 	if questUpdateRemote then
-		pcall(function() questUpdateRemote:FireClient(player, { action = "start", quest = quest }) end)
+		pcall(function() questUpdateRemote:FireClient(player, { action = "start", quest = q }) end)
 	end
+	return q
+end
+
+function QuestService:UpdateQuestProgress(player, questId, progress, detail)
+	local qlist = playerQuests[player]
+	if not qlist then return false end
+	for _,q in ipairs(qlist.active) do
+		if q.id == questId then
+			q.progress = math.clamp(progress or q.progress, 0, 100)
+			if questUpdateRemote then
+				pcall(function() questUpdateRemote:FireClient(player, { action = "progress", quest = q, detail = detail }) end)
+			end
+			return true
+		end
+	end
+	return false
 end
 
 function QuestService:CompleteQuest(player, questId)
 	local qlist = playerQuests[player]
-	if not qlist then return end
+	if not qlist then return false end
 	for i,q in ipairs(qlist.active) do
 		if q.id == questId then
+			q.completed = true
+			q.progress = 100
 			table.remove(qlist.active, i)
 			table.insert(qlist.completed, q)
 			if questUpdateRemote then
@@ -56,7 +88,6 @@ Players.PlayerRemoving:Connect(function(player)
 	playerQuests[player] = nil
 end)
 
--- Ensure player entry is created when they join
 Players.PlayerAdded:Connect(function(player)
 	if not playerQuests[player] then
 		QuestService:CreatePlayer(player)
@@ -76,6 +107,8 @@ function QuestService:TryClaim(player, questId)
 	if not qlist then return false, "no_quests" end
 	for i,q in ipairs(qlist.active) do
 		if q.id == questId then
+			q.completed = true
+			q.progress = 100
 			table.remove(qlist.active, i)
 			table.insert(qlist.completed, q)
 			if questUpdateRemote then

@@ -1,9 +1,15 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 
-local useSkill = remotes:FindFirstChild("UseSkill")
-if not useSkill or not useSkill:IsA("RemoteEvent") then
-    return warn("[UseSkillHandler] UseSkill remote missing")
+-- Wait up to 10 seconds for the remote to be created by EnsureRemotes
+local useSkill = remotes:WaitForChild("UseSkill", 10)
+if not useSkill then
+    warn("[UseSkillHandler] UseSkill remote not found after 10s; handler disabled")
+    return
+end
+if not useSkill:IsA("RemoteEvent") then
+    warn("[UseSkillHandler] UseSkill exists but is not a RemoteEvent; handler disabled")
+    return
 end
 
 local function safeRequire(name)

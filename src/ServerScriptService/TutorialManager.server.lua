@@ -50,13 +50,24 @@ local function teleportPlayerTo(player, position)
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if hrp then
         hrp.CFrame = CFrame.new(position + Vector3.new(0,3,0))
+        -- explicit log for teleport
+        local clientLog = remotes:FindFirstChild("ClientLog")
+        if clientLog and clientLog:IsA("RemoteEvent") then
+            pcall(function() clientLog:FireClient(player, ("Teleported to %s"):format(tostring(position))) end)
+        end
+        print("[TutorialManager] Teleported", player.Name, "->", position)
     end
 end
 
 local function startMovementTrial(player)
-    QuestService:AddQuest(player, { id = "movement_trial", title = "Movement Trial", objectives = { "Dodge twice", "Sprint forward" } })
+    QuestService:AddQuest(player, { id = "movement_trial", title = "Movement Trial", objectives = { "Dodge twice (2nd while holding forward)" } })
     teleportPlayerTo(player, POS.MovementTrial)
-    PLAYER_STATE[player] = { stage = "movement", dodgeCount = 0, sprintStarts = 0, sprintHeldStart = nil }
+    -- notify client UI state for UIRoot
+    local stateRem = remotes:FindFirstChild("StateChanged")
+    if stateRem and stateRem:IsA("RemoteEvent") then
+        pcall(function() stateRem:FireClient(player, "TUTORIAL_MOVEMENT") end)
+    end
+    PLAYER_STATE[player] = { stage = "movement", dodgeCount = 0 }
 end
 
 local function spawnCombatDummy(player)
@@ -86,6 +97,10 @@ end
 local function startCombatTrial(player)
     QuestService:AddQuest(player, { id = "combat_trial", title = "Combat Trial", objectives = { "Hit the enemy", "Parry or block an attack", "Defeat the enemy" } })
     teleportPlayerTo(player, POS.CombatTrial)
+    local stateRem = remotes:FindFirstChild("StateChanged")
+    if stateRem and stateRem:IsA("RemoteEvent") then
+        pcall(function() stateRem:FireClient(player, "TUTORIAL_COMBAT") end)
+    end
     local model, humanoid = spawnCombatDummy(player)
 
     -- simple deterministic AI: attack every 2.5s
@@ -145,23 +160,25 @@ tutorialInput.OnServerEvent:Connect(function(player, payload)
     if not state then return end
     if state.stage == "movement" then
         if payload.type == "dodge" then
-            state.dodgeCount = (state.dodgeCount or 0) + 1
-            if state.dodgeCount >= 2 then
-                -- mark dodge objective complete
-                -- require sprint next; wait for sprint to complete
-                if questUpdate then pcall(function() questUpdate:FireClient(player, { action = "progress", questId = "movement_trial", detail = "dodges" }) end) end
-            end
-        elseif payload.type == "sprintStart" then
-            state.sprintHeldStart = os.clock()
-        elseif payload.type == "sprintEnd" then
-            if state.sprintHeldStart then
-                local dur = os.clock() - state.sprintHeldStart
-                state.sprintHeldStart = nil
-                if dur >= 1.5 then
-                    -- sprint objective satisfied
+            -- payload.forward expected boolean
+            local forward = payload.forward and true or false
+            if (state.dodgeCount or 0) == 0 then
+                state.dodgeCount = 1
+                if questUpdate then pcall(function() questUpdate:FireClient(player, { action = "progress", questId = "movement_trial", detail = "first_dodge" }) end) end
+            else
+                -- second dodge must be with forward held
+                if forward then
+                    state.dodgeCount = 2
+                    if questUpdate then pcall(function() questUpdate:FireClient(player, { action = "progress", questId = "movement_trial", detail = "second_dodge_forward" }) end) end
+                    -- complete movement trial and move to combat
                     QuestService:CompleteQuest(player, "movement_trial")
-                    -- teleport to combat
                     task.delay(0.5, function() startCombatTrial(player) end)
+                else
+                    -- not correct: prompt client (optional)
+                    local clientLog = remotes:FindFirstChild("ClientLog")
+                    if clientLog and clientLog:IsA("RemoteEvent") then
+                        pcall(function() clientLog:FireClient(player, "Second dodge must be performed while holding forward (W).") end)
+                    end
                 end
             end
         end

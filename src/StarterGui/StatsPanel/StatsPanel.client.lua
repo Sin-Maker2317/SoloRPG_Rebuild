@@ -11,7 +11,8 @@ local GetPlayerState = remotes:WaitForChild("GetPlayerState")
 local gui = Instance.new("ScreenGui")
 gui.Name = "StatsPanel"
 gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
+gui.Parent = script.Parent
+gui.Enabled = false
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.fromScale(0.35, 0.5)

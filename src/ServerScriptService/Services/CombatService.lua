@@ -29,7 +29,7 @@ function CombatService:DealDamage(targetHumanoid: Humanoid, dealerPlayer)
 		return false
 	end
 
-	-- Check if target is in dodge window
+	-- Check if target is in dodge window (dealer dodging makes no sense here)
 	if dealerPlayer and DodgeService:IsInDodgeWindow(dealerPlayer) then
 		return false -- Dodge avoided attack
 	end
@@ -41,7 +41,7 @@ function CombatService:DealDamage(targetHumanoid: Humanoid, dealerPlayer)
 	end
 
 	targetHumanoid:TakeDamage(damage)
-	return true
+	return damage
 end
 
 function CombatService:PlayerSkillAttack(playerModel, targetEnemy, skillDef)

@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local GetRewards = Remotes:WaitForChild("GetRewards")
 local GateMessage = Remotes:WaitForChild("GateMessage")
@@ -9,8 +10,7 @@ local GateMessage = Remotes:WaitForChild("GateMessage")
 local gui = Instance.new("ScreenGui")
 gui.Name = "HUD"
 gui.ResetOnSpawn = false
-local playerGui = player:WaitForChild("PlayerGui")
-gui.Parent = playerGui
+gui.Parent = script.Parent
 -- start hidden until CITY state
 gui.Enabled = false
 

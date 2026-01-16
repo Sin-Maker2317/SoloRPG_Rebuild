@@ -1,8 +1,8 @@
 -- ServerScriptService/Services/ProgressService.lua
-local DataStoreService = game:GetService("DataStoreService")
 local RunService = game:GetService("RunService")
+local SaveService = require(script.Parent:WaitForChild("SaveService"))
 
-local store = DataStoreService:GetDataStore("PlayerProgress_V1")
+local store = SaveService:GetDataStore("PlayerProgress_V1")
 
 local ProgressService = {}
 ProgressService.__index = ProgressService
@@ -15,7 +15,7 @@ local function key(userId: number)
 end
 
 function ProgressService:Load(player: Player)
-	if IS_STUDIO then
+	if not SaveService:IsSaveEnabledForPlayer(player) then
 		cache[player] = { awakened = false, pathChoice = nil, faction = nil }
 		return cache[player]
 	end
@@ -55,7 +55,7 @@ function ProgressService:SetFaction(player: Player, faction: string)
 end
 
 function ProgressService:Save(player: Player)
-	if IS_STUDIO then return end
+	if not SaveService:IsSaveEnabledForPlayer(player) then return end
 
 	local p = cache[player]
 	if not p then return end

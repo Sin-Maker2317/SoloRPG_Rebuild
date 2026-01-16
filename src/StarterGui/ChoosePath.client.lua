@@ -10,7 +10,8 @@ local choosePath = remotes:WaitForChild("ChoosePath")
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ChoosePathGUI"
 screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.Parent = script.Parent
+screenGui.Enabled = false
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0,420,0,180)
@@ -55,3 +56,16 @@ guildBtn.MouseButton1Click:Connect(function()
     choosePath:FireServer("Guild")
     screenGui:Destroy()
 end)
+
+-- Gate visibility to UIState (UIRoot will manage layers)
+local playerGui = player:WaitForChild("PlayerGui")
+local se = playerGui:FindFirstChild("UIStateChanged")
+if se then
+    se.Event:Connect(function(ns)
+        screenGui.Enabled = (ns == "CHOOSE_PATH")
+    end)
+end
+local sv = playerGui:FindFirstChild("UIState")
+if sv and sv.Value == "CHOOSE_PATH" then
+    screenGui.Enabled = true
+end

@@ -10,9 +10,8 @@ local CombatEvent = remotes:WaitForChild("CombatEvent")
 local gui = Instance.new("ScreenGui")
 gui.Name = "SkillBar"
 gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
+gui.Parent = script.Parent
 local playerGui = player:WaitForChild("PlayerGui")
-gui.Parent = playerGui
 gui.Enabled = false
 
 local frame = Instance.new("Frame")

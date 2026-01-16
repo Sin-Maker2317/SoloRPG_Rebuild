@@ -49,14 +49,7 @@ screenGui.Name = "DevTestPanel"
 screenGui.ResetOnSpawn = false
 
 -- robust parenting: prefer player.PlayerGui when available
-local parentGui = nil
-if player and player:FindFirstChild("PlayerGui") then
-    parentGui = player.PlayerGui
-elseif script.Parent and script.Parent:IsA("PlayerGui") then
-    parentGui = script.Parent
-else
-    parentGui = player and player:FindFirstChild("PlayerGui") or script.Parent
-end
+local parentGui = script.Parent
 screenGui.Parent = parentGui
 screenGui.Enabled = false
 
@@ -77,12 +70,11 @@ local function updateVisibility()
 end
 
 -- Bind to changes
-if parentGui then
+do
     local devVal = parentGui:FindFirstChild("DevEnabled")
     if devVal then devVal.Changed:Connect(updateVisibility) end
     local stateEvent = parentGui:FindFirstChild("UIStateChanged")
     if stateEvent then stateEvent.Event:Connect(updateVisibility) end
-    -- initial
     task.spawn(updateVisibility)
 end
 

@@ -9,8 +9,8 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Flag to enable dev mode
-local DEV_MODE = true
+-- Flag to enable dev mode (disabled by default for safety)
+local DEV_MODE = false
 
 local function createDevPlatform()
     if not DEV_MODE then return end

@@ -7,7 +7,7 @@ local player = Players.LocalPlayer
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "DebugUI"
 screenGui.ResetOnSpawn = false
-local parent = player:WaitForChild("PlayerGui")
+local parent = script.Parent
 screenGui.Parent = parent
 screenGui.Enabled = false
 

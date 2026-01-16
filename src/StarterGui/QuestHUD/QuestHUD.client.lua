@@ -13,7 +13,7 @@ local gui = Instance.new("ScreenGui")
 gui.Name = "QuestHUD"
 gui.ResetOnSpawn = false
 local playerGui = player:WaitForChild("PlayerGui")
-gui.Parent = playerGui
+gui.Parent = script.Parent
 gui.Enabled = false
 
 local frame = Instance.new("Frame")
